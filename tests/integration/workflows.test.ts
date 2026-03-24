@@ -1,0 +1,307 @@
+// =============================================================================
+// Integration tests — multi-agent workflow scenarios
+//
+// Each test simulates a realistic multi-agent coordination pattern using
+// the MCP tool handler layer (same interface agents actually use).
+// =============================================================================
+
+import type { AppContext } from '../../src/context.js';
+import { createTestContext } from '../helpers.js';
+import { createToolHandler, type ToolHandler } from '../../src/transport/mcp.js';
+
+let ctx: AppContext;
+
+beforeEach(() => {
+  ctx = createTestContext();
+});
+
+afterEach(() => {
+  ctx.close();
+});
+
+function agent(name: string, capabilities?: string[]): ToolHandler {
+  const h = createToolHandler(ctx);
+  h('comm_register', { name, capabilities });
+  return h;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-agent coordination
+// ---------------------------------------------------------------------------
+
+describe('Multi-agent channel workflow', () => {
+  it('three agents coordinate via channel with threading', () => {
+    const lead = agent('lead', ['planning']);
+    const dev = agent('dev', ['code']);
+    const qa = agent('qa', ['testing']);
+
+    lead('comm_channel_create', { name: 'sprint', description: 'Sprint coordination' });
+    dev('comm_channel_join', { channel: 'sprint' });
+    qa('comm_channel_join', { channel: 'sprint' });
+
+    const task = lead('comm_channel_send', {
+      channel: 'sprint',
+      content: 'Implement auth module. Dev: build it. QA: write tests.',
+      importance: 'high',
+    }) as { id: number };
+
+    const devReply = dev('comm_reply', {
+      message_id: task.id,
+      content: 'On it — starting with the JWT middleware.',
+    }) as { id: number; thread_id: number };
+    expect(devReply.thread_id).toBe(task.id);
+
+    qa('comm_reply', {
+      message_id: task.id,
+      content: 'Will prepare test fixtures while dev builds.',
+    });
+
+    dev('comm_react', { message_id: task.id, reaction: 'in-progress' });
+    qa('comm_react', { message_id: task.id, reaction: 'acknowledged' });
+
+    const thread = lead('comm_thread', { message_id: task.id }) as unknown[];
+    expect(thread).toHaveLength(3);
+
+    const reactions = ctx.reactions.getForMessage(task.id);
+    expect(reactions).toHaveLength(2);
+  });
+});
+
+describe('Agent discovery and direct messaging', () => {
+  it('finds agents by capability and sends targeted messages', () => {
+    const coordinator = agent('coordinator');
+    const feHandler = agent('fe-dev', ['react', 'typescript']);
+    agent('be-dev', ['python', 'django']);
+    agent('devops', ['docker', 'k8s']);
+
+    const tsDevs = coordinator('comm_list_agents', { capability: 'typescript' }) as {
+      name: string;
+    }[];
+    expect(tsDevs).toHaveLength(1);
+    expect(tsDevs[0].name).toBe('fe-dev');
+
+    coordinator('comm_send', {
+      to: 'fe-dev',
+      content: 'Need a React component for the dashboard.',
+      importance: 'high',
+      ack_required: true,
+    });
+
+    const inbox = feHandler('comm_inbox', { unread_only: true }) as {
+      id: number;
+      ack_required: boolean;
+    }[];
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0].ack_required).toBe(true);
+
+    feHandler('comm_ack', { message_id: inbox[0].id });
+  });
+});
+
+describe('Status text coordination', () => {
+  it('agents set status to signal work phase', () => {
+    const a1 = agent('builder');
+    const a2 = agent('reviewer');
+
+    a1('comm_set_status', { text: 'implementing auth module' });
+    a2('comm_set_status', { text: 'waiting for PR' });
+
+    const agents = a1('comm_list_agents', {}) as { name: string; status_text: string | null }[];
+    const builder = agents.find((a) => a.name === 'builder');
+    const reviewer = agents.find((a) => a.name === 'reviewer');
+    expect(builder?.status_text).toBe('implementing auth module');
+    expect(reviewer?.status_text).toBe('waiting for PR');
+
+    a1('comm_set_status', { text: 'PR ready for review' });
+    a2('comm_set_status', { text: 'reviewing PR #42' });
+
+    const updated = a1('comm_list_agents', {}) as { name: string; status_text: string | null }[];
+    expect(updated.find((a) => a.name === 'builder')?.status_text).toBe('PR ready for review');
+    expect(updated.find((a) => a.name === 'reviewer')?.status_text).toBe('reviewing PR #42');
+  });
+});
+
+describe('Shared state with CAS for distributed locking', () => {
+  it('two agents contend for a lock via compare-and-swap', () => {
+    const a1 = agent('deployer-1');
+    const a2 = agent('deployer-2');
+
+    const win = a1('comm_state_cas', {
+      key: 'deploy-lock',
+      expected: null,
+      new_value: 'deployer-1',
+    }) as { swapped: boolean };
+    expect(win.swapped).toBe(true);
+
+    const lose = a2('comm_state_cas', {
+      key: 'deploy-lock',
+      expected: null,
+      new_value: 'deployer-2',
+    }) as { swapped: boolean };
+    expect(lose.swapped).toBe(false);
+
+    const holder = a2('comm_state_get', { key: 'deploy-lock' }) as { value: string };
+    expect(holder.value).toBe('deployer-1');
+
+    a1('comm_state_delete', { key: 'deploy-lock' });
+
+    const grab = a2('comm_state_cas', {
+      key: 'deploy-lock',
+      expected: null,
+      new_value: 'deployer-2',
+    }) as { swapped: boolean };
+    expect(grab.swapped).toBe(true);
+  });
+});
+
+describe('Message forwarding across channels', () => {
+  it('forwards a channel message to a DM with comment', () => {
+    const alice = agent('alice');
+    const bob = agent('bob');
+    const charlie = agent('charlie');
+
+    alice('comm_channel_create', { name: 'announcements' });
+    bob('comm_channel_join', { channel: 'announcements' });
+
+    const announcement = alice('comm_channel_send', {
+      channel: 'announcements',
+      content: 'Release v2.0 is scheduled for Friday.',
+      importance: 'high',
+    }) as { id: number };
+
+    bob('comm_forward', {
+      message_id: announcement.id,
+      to: 'charlie',
+      comment: 'FYI — you should prepare the deploy script.',
+    });
+
+    const inbox = charlie('comm_inbox', {}) as { content: string }[];
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0].content).toContain('Forwarded from alice');
+    expect(inbox[0].content).toContain('Release v2.0');
+    expect(inbox[0].content).toContain('prepare the deploy script');
+  });
+});
+
+describe('Channel lifecycle with description updates', () => {
+  it('create, update description, archive, re-create', () => {
+    const admin = agent('ch-admin');
+    agent('member');
+
+    const ch = admin('comm_channel_create', {
+      name: 'temp-project',
+      description: 'Q1 project',
+    }) as { id: string; description: string };
+    expect(ch.description).toBe('Q1 project');
+
+    const updated = admin('comm_channel_update', {
+      channel: 'temp-project',
+      description: 'Q1 project — extended to Q2',
+    }) as { description: string };
+    expect(updated.description).toBe('Q1 project — extended to Q2');
+
+    admin('comm_channel_archive', { channel: 'temp-project' });
+
+    const channels = admin('comm_channel_list', { include_archived: true }) as {
+      name: string;
+      archived_at: string | null;
+    }[];
+    const archived = channels.find((c) => c.name === 'temp-project');
+    expect(archived?.archived_at).not.toBeNull();
+  });
+});
+
+describe('Reaction-based signaling', () => {
+  it('agents use reactions as lightweight status updates', () => {
+    const lead = agent('task-lead');
+    const w1 = agent('worker-1');
+    const w2 = agent('worker-2');
+
+    lead('comm_channel_create', { name: 'tasks' });
+    w1('comm_channel_join', { channel: 'tasks' });
+    w2('comm_channel_join', { channel: 'tasks' });
+
+    const t1 = lead('comm_channel_send', {
+      channel: 'tasks',
+      content: 'Task A: migrate DB schema',
+    }) as { id: number };
+    const t2 = lead('comm_channel_send', {
+      channel: 'tasks',
+      content: 'Task B: update API docs',
+    }) as { id: number };
+
+    w1('comm_react', { message_id: t1.id, reaction: 'claimed' });
+    w2('comm_react', { message_id: t2.id, reaction: 'claimed' });
+
+    w1('comm_react', { message_id: t1.id, reaction: 'done' });
+    w1('comm_unreact', { message_id: t1.id, reaction: 'claimed' });
+
+    const t1Reactions = ctx.reactions.getForMessage(t1.id);
+    expect(t1Reactions).toHaveLength(1);
+    expect(t1Reactions[0].reaction).toBe('done');
+
+    const t2Reactions = ctx.reactions.getForMessage(t2.id);
+    expect(t2Reactions).toHaveLength(1);
+    expect(t2Reactions[0].reaction).toBe('claimed');
+  });
+});
+
+describe('Search across agents and channels', () => {
+  it('full-text search finds messages from multiple sources', () => {
+    const a1 = agent('arch');
+    const a2 = agent('impl');
+
+    a1('comm_channel_create', { name: 'design' });
+    a2('comm_channel_join', { channel: 'design' });
+
+    a1('comm_channel_send', {
+      channel: 'design',
+      content: 'The authentication module should use JWT tokens with RS256 signing.',
+    });
+    a2('comm_channel_send', {
+      channel: 'design',
+      content: 'I will implement the JWT verification middleware in Express.',
+    });
+    a1('comm_send', {
+      to: 'impl',
+      content: 'Make sure the JWT secret rotation is handled properly.',
+    });
+
+    const results = a1('comm_search', { query: 'JWT' }) as { message: { content: string } }[];
+    expect(results.length).toBe(3);
+  });
+});
+
+describe('Rate limiting does not block different agents', () => {
+  it('agent A hitting limit does not affect agent B', () => {
+    const spammer = agent('spammer');
+    const normal = agent('normal-user');
+    agent('target');
+
+    for (let i = 0; i < 10; i++) {
+      spammer('comm_send', { to: 'target', content: `spam ${i}` });
+    }
+    expect(() => spammer('comm_send', { to: 'target', content: 'overflow' })).toThrow('Rate limit');
+
+    expect(() =>
+      normal('comm_send', { to: 'target', content: 'this should work fine' }),
+    ).not.toThrow();
+  });
+});
+
+describe('Offline agent re-registration', () => {
+  it('agent can re-register after going offline and retains status_text', () => {
+    const h = createToolHandler(ctx);
+    h('comm_register', { name: 'transient' });
+    h('comm_set_status', { text: 'working' });
+    h('comm_unregister', {});
+
+    const h2 = createToolHandler(ctx);
+    const result = h2('comm_register', { name: 'transient' }) as {
+      status: string;
+      status_text: string | null;
+    };
+    expect(result.status).toBe('online');
+    expect(result.status_text).toBe('working');
+  });
+});
