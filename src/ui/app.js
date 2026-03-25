@@ -1143,25 +1143,70 @@
 
   // Overview actions
   var cleanupBtn = document.getElementById('overview-cleanup');
-  if (cleanupBtn) {
-    cleanupBtn.addEventListener('click', function () {
-      if (!confirm('Remove all offline agents and stale data?')) return;
-      fetch('/api/agents/offline', { method: 'DELETE' })
-        .then(function (r) {
-          return r.json();
-        })
-        .then(function (data) {
-          showToast('Cleaned up', data.purged + ' offline agent(s) removed');
-          // Request fresh state from WS
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'refresh' }));
-          }
-        })
-        .catch(function () {
-          showToast('Error', 'Failed to clean up');
-        });
-    });
+  var cleanupModal = document.getElementById('cleanup-modal');
+
+  function openCleanupModal() {
+    cleanupModal.classList.remove('hidden');
   }
+
+  function closeCleanupModal() {
+    cleanupModal.classList.add('hidden');
+  }
+
+  function refreshAfterCleanup() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'refresh' }));
+    }
+  }
+
+  function formatCleanupStats(s) {
+    var parts = [];
+    if (s.agents) parts.push(s.agents + ' agent(s)');
+    if (s.messages) parts.push(s.messages + ' message(s)');
+    if (s.channels) parts.push(s.channels + ' channel(s)');
+    if (s.state) parts.push(s.state + ' state');
+    return parts.length ? parts.join(', ') : 'nothing to clean';
+  }
+
+  if (cleanupBtn) {
+    cleanupBtn.addEventListener('click', openCleanupModal);
+  }
+
+  document.getElementById('cleanup-cancel').addEventListener('click', closeCleanupModal);
+
+  cleanupModal.addEventListener('click', function (e) {
+    if (e.target === cleanupModal) closeCleanupModal();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !cleanupModal.classList.contains('hidden')) {
+      closeCleanupModal();
+    }
+  });
+
+  function runCleanup(endpoint, label) {
+    closeCleanupModal();
+    fetch(endpoint, { method: 'POST' })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        showToast(label, formatCleanupStats(data));
+        refreshAfterCleanup();
+      })
+      .catch(function () {
+        showToast('Error', label + ' failed');
+      });
+  }
+
+  document.getElementById('cleanup-stale').addEventListener('click', function () {
+    runCleanup('/api/cleanup/stale', 'Stale cleanup');
+  });
+
+  document.getElementById('cleanup-full').addEventListener('click', function () {
+    runCleanup('/api/cleanup/full', 'Full cleanup');
+  });
 
   var refreshBtn = document.getElementById('overview-refresh');
   if (refreshBtn) {
@@ -1172,6 +1217,13 @@
       }
     });
   }
+
+  document.querySelectorAll('.stat-card-link').forEach(function (card) {
+    card.addEventListener('click', function () {
+      var target = card.getAttribute('data-nav');
+      if (target) switchView(target);
+    });
+  });
 
   // Sidebar toggle (mobile)
   var sidebarToggle = document.getElementById('sidebar-toggle');
@@ -1245,6 +1297,7 @@
       fetch('/api/messages', { method: 'DELETE' })
         .then(function () {
           state.messages = [];
+          state.messageCount = 0;
           render();
           showToast('Cleared', 'All messages purged');
         })

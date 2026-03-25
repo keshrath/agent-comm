@@ -24,6 +24,10 @@ export interface CleanupStats {
   state: number;
 }
 
+export interface StaleCleanupStats extends CleanupStats {
+  memberships: number;
+}
+
 export class CleanupService {
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -102,6 +106,73 @@ export class CleanupService {
       process.stderr.write(`[agent-comm] Purged ${agents} offline agent(s)\n`);
     }
     return agents;
+  }
+
+  /** Purge stale (offline) agents and all their associated data. */
+  purgeStaleAssociated(): StaleCleanupStats {
+    const staleAgents = this.db.queryAll<{ id: string }>(
+      `SELECT id FROM agents WHERE status = 'offline' AND last_heartbeat < datetime('now', '-1 hour')`,
+    );
+
+    if (staleAgents.length === 0) {
+      return { agents: 0, messages: 0, reads: 0, channels: 0, state: 0, memberships: 0 };
+    }
+
+    const ids = staleAgents.map((a: { id: string }) => a.id);
+    const placeholders = ids.map(() => '?').join(',');
+
+    const messages = this.db.run(
+      `DELETE FROM messages WHERE from_agent IN (${placeholders}) OR to_agent IN (${placeholders})`,
+      [...ids, ...ids],
+    ).changes;
+
+    const reads = this.db.run(
+      `DELETE FROM message_reads WHERE NOT EXISTS (SELECT 1 FROM messages WHERE messages.id = message_reads.message_id)`,
+    ).changes;
+
+    const memberships = this.db.run(
+      `DELETE FROM channel_members WHERE agent_id IN (${placeholders})`,
+      ids,
+    ).changes;
+
+    const channels = this.db.run(
+      `DELETE FROM channels WHERE created_by IN (${placeholders})
+         AND NOT EXISTS (SELECT 1 FROM channel_members WHERE channel_members.channel_id = channels.id)`,
+      ids,
+    ).changes;
+
+    const state = this.db.run(
+      `DELETE FROM state WHERE updated_by IN (${placeholders})`,
+      ids,
+    ).changes;
+
+    const agents = this.db.run(`DELETE FROM agents WHERE id IN (${placeholders})`, ids).changes;
+
+    if (agents + messages + channels + state > 0) {
+      process.stderr.write(
+        `[agent-comm] Stale cleanup: ${agents} agents, ${messages} messages, ${channels} channels, ${state} state, ${memberships} memberships purged\n`,
+      );
+    }
+
+    return { agents, messages, reads, channels, state, memberships };
+  }
+
+  /** Purge everything: all agents, messages, channels, state. */
+  purgeEverything(): CleanupStats {
+    this.db.run(`DELETE FROM message_reactions`);
+    this.db.run(`DELETE FROM message_reads`);
+    this.db.run(`DELETE FROM channel_members`);
+    const messages = this.db.run(`DELETE FROM messages`).changes;
+    const channels = this.db.run(`DELETE FROM channels`).changes;
+    const agents = this.db.run(`DELETE FROM agents`).changes;
+    const reads = 0;
+    const state = this.db.run(`DELETE FROM state`).changes;
+
+    process.stderr.write(
+      `[agent-comm] Full purge: ${agents} agents, ${messages} messages, ${channels} channels, ${state} state entries\n`,
+    );
+
+    return { agents, messages, reads, channels, state };
   }
 
   /** Run full cleanup immediately and return stats. */

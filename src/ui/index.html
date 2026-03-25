@@ -149,22 +149,22 @@
             </div>
           </div>
           <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card stat-card-link" data-nav="agents">
               <span class="material-symbols-outlined stat-icon">smart_toy</span>
               <div class="stat-value" id="stat-agents">0</div>
               <div class="stat-label">Agents Online</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card stat-card-link" data-nav="channels">
               <span class="material-symbols-outlined stat-icon">forum</span>
               <div class="stat-value" id="stat-channels">0</div>
               <div class="stat-label">Channels</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card stat-card-link" data-nav="messages">
               <span class="material-symbols-outlined stat-icon">chat</span>
               <div class="stat-value" id="stat-messages">0</div>
               <div class="stat-label">Messages</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card stat-card-link" data-nav="state">
               <span class="material-symbols-outlined stat-icon">database</span>
               <div class="stat-value" id="stat-state">0</div>
               <div class="stat-label">State Entries</div>
@@ -258,6 +258,41 @@
           </div>
         </section>
       </main>
+    </div>
+    <div
+      id="cleanup-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cleanup-modal-title"
+    >
+      <div class="modal">
+        <h3 id="cleanup-modal-title">
+          <span class="material-symbols-outlined panel-icon">mop</span>Clean Up
+        </h3>
+        <p class="modal-desc">Choose what to remove:</p>
+        <div class="modal-options">
+          <button id="cleanup-stale" class="modal-option">
+            <span class="material-symbols-outlined">auto_delete</span>
+            <div class="modal-option-text">
+              <strong>Stale</strong>
+              <span
+                >Remove offline agents and their messages, empty channels, and state entries</span
+              >
+            </div>
+          </button>
+          <button id="cleanup-full" class="modal-option modal-option-danger">
+            <span class="material-symbols-outlined">delete_forever</span>
+            <div class="modal-option-text">
+              <strong>Full</strong>
+              <span>Remove all agents, messages, channels, and state entries</span>
+            </div>
+          </button>
+        </div>
+        <div class="modal-footer">
+          <button id="cleanup-cancel" class="modal-cancel">Cancel</button>
+        </div>
+      </div>
     </div>
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>

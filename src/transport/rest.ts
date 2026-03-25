@@ -293,6 +293,16 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     json(res, stats);
   });
 
+  route('POST', '/api/cleanup/stale', (_req, res) => {
+    const stats = ctx.cleanup.purgeStaleAssociated();
+    json(res, stats);
+  });
+
+  route('POST', '/api/cleanup/full', (_req, res) => {
+    const stats = ctx.cleanup.purgeEverything();
+    json(res, stats);
+  });
+
   route('GET', '/api/export', (_req, res) => {
     json(res, {
       exported_at: new Date().toISOString(),
