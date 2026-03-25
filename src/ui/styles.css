@@ -971,6 +971,7 @@ body {
 }
 
 .empty-state-icon {
+  display: block;
   font-size: 32px;
   margin-bottom: 8px;
   opacity: 0.5;

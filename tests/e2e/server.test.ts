@@ -57,7 +57,7 @@ describe('REST API E2E', () => {
     const { status, body } = await get('/health');
     expect(status).toBe(200);
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('1.0.0');
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(typeof body.uptime).toBe('number');
   });
 

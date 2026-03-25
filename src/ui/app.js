@@ -98,6 +98,9 @@
     state = data;
     state.messageCount = data.messageCount || data.messages.length;
     state.reactions = data.reactions || {};
+    if (data.version) {
+      document.getElementById('version').textContent = 'v' + data.version;
+    }
     // Cache agent names so they survive purges
     (state.agents || []).forEach(function (a) {
       agentNameCache[a.id] = a.name;
@@ -382,7 +385,7 @@
 
     var agentsHtml =
       agents.length === 0
-        ? '<div class="empty-state"><div class="empty-state-icon">&#128279;</div>No agents online<div class="empty-state-hint">Agents will appear when they register</div></div>'
+        ? '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">link_off</span>No agents online<div class="empty-state-hint">Agents will appear when they register</div></div>'
         : agents
             .map(function (a) {
               var caps = parseCaps(a);
@@ -424,7 +427,7 @@
 
     var activityHtml =
       messages.length === 0
-        ? '<div class="empty-state"><div class="empty-state-icon">&#128172;</div>No recent activity</div>'
+        ? '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">forum</span>No recent activity</div>'
         : messages
             .slice(0, 15)
             .map(function (m) {
@@ -505,7 +508,7 @@
 
     if (agents.length === 0) {
       container.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#129302;</div>No agents registered<div class="empty-state-hint">Use comm_register to connect an agent</div></div>';
+        '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">smart_toy</span>No agents registered<div class="empty-state-hint">Use comm_register to connect an agent</div></div>';
       return;
     }
 
@@ -661,7 +664,7 @@
         '<div class="empty-state">' +
         (query || messageFilters.agent || messageFilters.channel || searchResults !== null
           ? 'No matching messages'
-          : '<div class="empty-state-icon">&#128233;</div>No messages yet') +
+          : '<span class="material-symbols-outlined empty-state-icon">inbox</span>No messages yet') +
         '</div>';
       if (detailPane)
         detailPane.innerHTML =
@@ -949,7 +952,7 @@
 
     if (channels.length === 0) {
       container.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#128266;</div>No channels created<div class="empty-state-hint">Use comm_channel_create to add a channel</div></div>';
+        '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">forum</span>No channels created<div class="empty-state-hint">Use comm_channel_create to add a channel</div></div>';
       return;
     }
 
@@ -1010,7 +1013,7 @@
         '<tr><td colspan="5" class="empty-state">' +
         (filter
           ? 'No matching entries'
-          : '<div class="empty-state-icon">&#128451;</div>No shared state') +
+          : '<span class="material-symbols-outlined empty-state-icon">database</span>No shared state') +
         '</td></tr>';
       return;
     }

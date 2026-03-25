@@ -17,6 +17,12 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 
+// Fail-open: never let hook crash block the user
+process.on('uncaughtException', (err) => {
+  process.stderr.write(`[agent-comm hook] fatal: ${err.message}\n`);
+  process.exit(0);
+});
+
 function check() {
   const dbPath = join(homedir(), '.agent-comm', 'agent-comm.db');
   if (!existsSync(dbPath)) return { registered: false, recentMessages: 0, onlineAgents: 0 };
@@ -47,35 +53,42 @@ function check() {
   }
 }
 
+function run() {
+  try {
+    const result = check();
+    if (!result) {
+      console.log(JSON.stringify({}));
+      return;
+    }
+    const { registered, onlineAgents, recentMessages } = result;
+
+    if (!registered) {
+      console.log(
+        JSON.stringify({
+          hookSpecificOutput: {
+            additionalContext: `No agent-comm session. Call comm_register first, then comm_channel_join "general".`,
+          },
+        }),
+      );
+    } else if (recentMessages > 0) {
+      console.log(
+        JSON.stringify({
+          hookSpecificOutput: {
+            additionalContext: `${onlineAgents} agent(s) online, ${recentMessages} message(s) in last 5 min. Call comm_inbox to check for updates.`,
+          },
+        }),
+      );
+    } else {
+      console.log(JSON.stringify({}));
+    }
+  } catch (err) {
+    process.stderr.write(`[agent-comm hook] uncaught: ${err.message}\n`);
+    console.log(JSON.stringify({}));
+  }
+}
+
 let input = '';
 process.stdin.on('data', (chunk) => {
   input += chunk;
 });
-process.stdin.on('end', () => {
-  const result = check();
-  if (!result) {
-    console.log(JSON.stringify({}));
-    return;
-  }
-  const { registered, onlineAgents, recentMessages } = result;
-
-  if (!registered) {
-    console.log(
-      JSON.stringify({
-        hookSpecificOutput: {
-          additionalContext: `No agent-comm session. Call comm_register first, then comm_channel_join "general".`,
-        },
-      }),
-    );
-  } else if (recentMessages > 0) {
-    console.log(
-      JSON.stringify({
-        hookSpecificOutput: {
-          additionalContext: `${onlineAgents} agent(s) online, ${recentMessages} message(s) in last 5 min. Call comm_inbox to check for updates.`,
-        },
-      }),
-    );
-  } else {
-    console.log(JSON.stringify({}));
-  }
-});
+process.stdin.on('end', run);

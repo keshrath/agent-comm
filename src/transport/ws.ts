@@ -9,8 +9,14 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import type { AppContext } from '../context.js';
 import type { EventType } from '../types.js';
+
+const __ws_dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__ws_dirname, '..', '..', 'package.json'), 'utf8'));
 
 const MAX_WS_MESSAGE_SIZE = 4096;
 const MAX_WS_CONNECTIONS = 50;
@@ -198,6 +204,7 @@ function sendFullState(ws: WebSocket, ctx: AppContext): void {
     ws.send(
       JSON.stringify({
         type: 'state',
+        version: pkg.version,
         agents: ctx.agents.list({ includeOffline: true }),
         channels: ctx.channels.list(),
         messages: publicMessages,

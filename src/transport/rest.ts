@@ -63,10 +63,12 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   // API routes
   // -----------------------------------------------------------------------
 
+  const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+
   route('GET', '/health', (_req, res) => {
     json(res, {
       status: 'ok',
-      version: '1.0.0',
+      version: pkg.version,
       uptime: process.uptime(),
       agents: ctx.agents.list().length,
     });

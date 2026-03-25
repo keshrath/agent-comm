@@ -39,7 +39,7 @@
             <h1>agent-comm</h1>
           </div>
           <div class="sidebar-header-row">
-            <span class="version">v1.0.0</span>
+            <span class="version" id="version"></span>
             <button
               id="theme-toggle"
               class="icon-btn"
@@ -259,17 +259,9 @@
         </section>
       </main>
     </div>
-    <div
-      id="cleanup-modal"
-      class="modal-overlay hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="cleanup-modal-title"
-    >
+    <div id="cleanup-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
       <div class="modal">
-        <h3 id="cleanup-modal-title">
-          <span class="material-symbols-outlined panel-icon">mop</span>Clean Up
-        </h3>
+        <h3><span class="material-symbols-outlined panel-icon">mop</span>Clean Up</h3>
         <p class="modal-desc">Choose what to remove:</p>
         <div class="modal-options">
           <button id="cleanup-stale" class="modal-option">
