@@ -18,6 +18,14 @@
 
 When you run multiple AI agents on the same codebase — code review in one terminal, implementation in another, testing in a third — they have no idea the others exist. They duplicate work, create merge conflicts, and miss context.
 
+|                   | Without agent-comm                   | With agent-comm                      |
+| ----------------- | ------------------------------------ | ------------------------------------ |
+| **Discovery**     | Agents don't know others exist       | Agents register and find each other  |
+| **Coordination**  | Edit the same file, create conflicts | Lock files/regions, divide work      |
+| **Communication** | None — each agent works blind        | Messages, channels, broadcasts       |
+| **State sharing** | Duplicate work, missed context       | Shared KV store with atomic CAS      |
+| **Visibility**    | No idea what's happening             | Real-time dashboard shows everything |
+
 **agent-comm** gives them a shared communication layer:
 
 - Agents **register** with a name and capabilities so others can discover them
@@ -190,11 +198,11 @@ sequenceDiagram
     participant S as agent-comm
     participant B as Agent B
 
-    A->>S: comm_send(to: "B", content: "review PR #42")
+    A->>S: comm_send(to B, content review PR 42)
     Note over S: Store in SQLite, emit event
     B->>S: comm_inbox()
-    S-->>B: [{ from: "A", content: "review PR #42" }]
-    B->>S: comm_reply(message_id: 1, content: "LGTM, merging")
+    S-->>B: message from A
+    B->>S: comm_reply(message_id 1, LGTM merging)
 ```
 
 ### Shared state with CAS (distributed locking)
@@ -205,10 +213,10 @@ sequenceDiagram
     participant S as agent-comm
     participant B as Agent B
 
-    A->>S: comm_state_cas(key: "deploy-lock", expected: null, new: "agent-a")
-    S-->>A: { swapped: true }
-    B->>S: comm_state_cas(key: "deploy-lock", expected: null, new: "agent-b")
-    S-->>B: { swapped: false }
+    A->>S: comm_state_cas(key deploy-lock, new agent-a)
+    S-->>A: swapped true
+    B->>S: comm_state_cas(key deploy-lock, new agent-b)
+    S-->>B: swapped false
     Note over B: Lock held by agent-a, back off
 ```
 
