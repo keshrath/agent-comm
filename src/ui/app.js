@@ -10,6 +10,14 @@
 (function () {
   'use strict';
 
+  // DOM morphing helper: diff-patches children instead of replacing innerHTML.
+  // Preserves focus, scroll, CSS transitions — only changed nodes are touched.
+  function morph(el, newInnerHTML) {
+    var wrap = document.createElement(el.tagName);
+    wrap.innerHTML = newInnerHTML;
+    morphdom(el, wrap, { childrenOnly: true });
+  }
+
   var state = { agents: [], channels: [], messages: [], state: [], messageCount: 0, reactions: {} };
   var agentNameCache = {}; // id → name, survives agent purges
   var ws = null;
@@ -442,12 +450,7 @@
             })
             .join('');
     var agentsEl = document.getElementById('overview-agents');
-    agentsEl.innerHTML = agentsHtml;
-    agentsEl.querySelectorAll('[data-agent-id]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        setMessageFilter('agent', this.getAttribute('data-agent-id'));
-      });
-    });
+    morph(agentsEl, agentsHtml);
 
     var activityHtml =
       messages.length === 0
@@ -476,22 +479,7 @@
             })
             .join('');
     var activityEl = document.getElementById('overview-activity');
-    activityEl.innerHTML = activityHtml;
-    activityEl.querySelectorAll('[data-msg-id]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        var msgId = parseInt(this.getAttribute('data-msg-id'), 10);
-        selectedMessageId = msgId;
-        messageFilters.agent = null;
-        messageFilters.channel = null;
-        location.hash = 'messages';
-        switchView('messages');
-        renderMessages();
-        setTimeout(function () {
-          var target = document.querySelector('.msg-compact[data-msg-id="' + msgId + '"]');
-          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 50);
-      });
-    });
+    morph(activityEl, activityHtml);
   }
 
   function buildAgentCard(a) {
@@ -531,41 +519,27 @@
     var container = document.getElementById('agents-list');
 
     if (agents.length === 0) {
-      container.innerHTML =
-        '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">smart_toy</span>No agents registered<div class="empty-state-hint">Use comm_register to connect an agent</div></div>';
+      morph(
+        container,
+        '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">smart_toy</span>No agents registered<div class="empty-state-hint">Use comm_register to connect an agent</div></div>',
+      );
       return;
     }
 
-    var emptyState = container.querySelector('.empty-state');
-    if (emptyState) emptyState.remove();
-
-    var currentIds = {};
-    agents.forEach(function (a) {
-      currentIds[a.id] = true;
-    });
-
-    container.querySelectorAll('.agent-card[data-agent-id]').forEach(function (card) {
-      if (!currentIds[card.getAttribute('data-agent-id')]) card.remove();
-    });
-
-    agents.forEach(function (a) {
-      var existing = container.querySelector(
-        '.agent-card[data-agent-id="' + CSS.escape(a.id) + '"]',
-      );
-      var html = buildAgentCard(a);
-      if (existing) {
-        if (existing.innerHTML !== html) existing.innerHTML = html;
-      } else {
-        var div = document.createElement('div');
-        div.className = 'card agent-card no-anim';
-        div.setAttribute('data-agent-id', a.id);
-        div.innerHTML = html;
-        div.addEventListener('click', function () {
-          setMessageFilter('agent', a.id);
-        });
-        container.appendChild(div);
-      }
-    });
+    morph(
+      container,
+      agents
+        .map(function (a) {
+          return (
+            '<div class="card agent-card" data-agent-id="' +
+            escAttr(a.id) +
+            '">' +
+            buildAgentCard(a) +
+            '</div>'
+          );
+        })
+        .join(''),
+    );
   }
 
   var selectedMessageId = null;
@@ -684,15 +658,19 @@
     }
 
     if (filtered.length === 0) {
-      container.innerHTML =
+      morph(
+        container,
         '<div class="empty-state">' +
-        (query || messageFilters.agent || messageFilters.channel || searchResults !== null
-          ? 'No matching messages'
-          : '<span class="material-symbols-outlined empty-state-icon">inbox</span>No messages yet') +
-        '</div>';
+          (query || messageFilters.agent || messageFilters.channel || searchResults !== null
+            ? 'No matching messages'
+            : '<span class="material-symbols-outlined empty-state-icon">inbox</span>No messages yet') +
+          '</div>',
+      );
       if (detailPane)
-        detailPane.innerHTML =
-          '<div class="detail-empty"><span class="material-symbols-outlined detail-empty-icon">mail</span><div>No messages</div></div>';
+        morph(
+          detailPane,
+          '<div class="detail-empty"><span class="material-symbols-outlined detail-empty-icon">mail</span><div>No messages</div></div>',
+        );
       return;
     }
 
@@ -704,73 +682,76 @@
       }
     });
 
-    container.innerHTML = filtered
-      .map(function (m) {
-        var fromName = resolveAgentName(m.from_agent);
-        var toLabel = m.to_agent
-          ? '&rarr; ' + esc(resolveAgentName(m.to_agent))
-          : m.channel_id
-            ? '&rarr; ' + esc(resolveChannelName(m.channel_id))
-            : '';
-        var isFwd = /--- Forwarded from .+ ---/.test(m.content || '');
-        var rawPreview = stripMd(m.content || '');
-        // For forwarded messages, show the original content as preview
-        if (isFwd) {
-          var fwdParts = (m.content || '').match(/--- Forwarded from .+ ---\n([\s\S]*)/);
-          rawPreview = fwdParts ? stripMd(fwdParts[1]) : rawPreview;
-        }
-        var preview = rawPreview.substring(0, 80);
-        if (rawPreview.length > 80) preview += '...';
-        var replies = threadRoots[m.id] || [];
-        var isSelected = selectedMessageId === m.id;
+    morph(
+      container,
+      filtered
+        .map(function (m) {
+          var fromName = resolveAgentName(m.from_agent);
+          var toLabel = m.to_agent
+            ? '&rarr; ' + esc(resolveAgentName(m.to_agent))
+            : m.channel_id
+              ? '&rarr; ' + esc(resolveChannelName(m.channel_id))
+              : '';
+          var isFwd = /--- Forwarded from .+ ---/.test(m.content || '');
+          var rawPreview = stripMd(m.content || '');
+          // For forwarded messages, show the original content as preview
+          if (isFwd) {
+            var fwdParts = (m.content || '').match(/--- Forwarded from .+ ---\n([\s\S]*)/);
+            rawPreview = fwdParts ? stripMd(fwdParts[1]) : rawPreview;
+          }
+          var preview = rawPreview.substring(0, 80);
+          if (rawPreview.length > 80) preview += '...';
+          var replies = threadRoots[m.id] || [];
+          var isSelected = selectedMessageId === m.id;
 
-        return (
-          '<div class="msg-compact no-anim' +
-          (isSelected ? ' selected' : '') +
-          '" data-msg-id="' +
-          m.id +
-          '">' +
-          '<div class="msg-compact-header">' +
-          '<span class="message-avatar">' +
-          esc(fromName.substring(0, 2).toUpperCase()) +
-          '</span>' +
-          '<span class="msg-compact-from">' +
-          esc(fromName) +
-          '</span>' +
-          '<span class="msg-compact-to">' +
-          toLabel +
-          '</span>' +
-          '<span class="msg-compact-time">' +
-          timeAgo(m.created_at) +
-          '</span>' +
-          '</div>' +
-          '<div class="msg-compact-preview">' +
-          esc(preview) +
-          '</div>' +
-          '<div class="msg-compact-badges">' +
-          (m.importance && m.importance !== 'normal'
-            ? '<span class="importance-badge importance-' +
-              esc(m.importance) +
-              '">' +
-              esc(m.importance) +
-              '</span>'
-            : '') +
-          (isFwd ? '<span class="message-tag fwd-tag">fwd</span>' : '') +
-          (replies.length > 0
-            ? '<span class="message-tag thread-count">' + replies.length + ' replies</span>'
-            : '') +
-          (m.thread_id ? '<span class="message-tag">reply</span>' : '') +
-          (m.ack_required ? '<span class="message-tag ack-tag">ack</span>' : '') +
-          ((state.reactions[m.id] || []).length > 0
-            ? '<span class="message-tag reaction-tag">' +
-              (state.reactions[m.id] || []).length +
-              ' reactions</span>'
-            : '') +
-          '</div>' +
-          '</div>'
-        );
-      })
-      .join('');
+          return (
+            '<div class="msg-compact no-anim' +
+            (isSelected ? ' selected' : '') +
+            '" data-msg-id="' +
+            m.id +
+            '">' +
+            '<div class="msg-compact-header">' +
+            '<span class="message-avatar">' +
+            esc(fromName.substring(0, 2).toUpperCase()) +
+            '</span>' +
+            '<span class="msg-compact-from">' +
+            esc(fromName) +
+            '</span>' +
+            '<span class="msg-compact-to">' +
+            toLabel +
+            '</span>' +
+            '<span class="msg-compact-time">' +
+            timeAgo(m.created_at) +
+            '</span>' +
+            '</div>' +
+            '<div class="msg-compact-preview">' +
+            esc(preview) +
+            '</div>' +
+            '<div class="msg-compact-badges">' +
+            (m.importance && m.importance !== 'normal'
+              ? '<span class="importance-badge importance-' +
+                esc(m.importance) +
+                '">' +
+                esc(m.importance) +
+                '</span>'
+              : '') +
+            (isFwd ? '<span class="message-tag fwd-tag">fwd</span>' : '') +
+            (replies.length > 0
+              ? '<span class="message-tag thread-count">' + replies.length + ' replies</span>'
+              : '') +
+            (m.thread_id ? '<span class="message-tag">reply</span>' : '') +
+            (m.ack_required ? '<span class="message-tag ack-tag">ack</span>' : '') +
+            ((state.reactions[m.id] || []).length > 0
+              ? '<span class="message-tag reaction-tag">' +
+                (state.reactions[m.id] || []).length +
+                ' reactions</span>'
+              : '') +
+            '</div>' +
+            '</div>'
+          );
+        })
+        .join(''),
+    );
 
     if (selectedMessageId) {
       renderMessageDetail(selectedMessageId, threadRoots);
@@ -975,45 +956,27 @@
     var container = document.getElementById('channels-list');
 
     if (channels.length === 0) {
-      container.innerHTML =
-        '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">forum</span>No channels created<div class="empty-state-hint">Use comm_channel_create to add a channel</div></div>';
+      morph(
+        container,
+        '<div class="empty-state"><span class="material-symbols-outlined empty-state-icon">forum</span>No channels created<div class="empty-state-hint">Use comm_channel_create to add a channel</div></div>',
+      );
       return;
     }
 
-    var emptyState = container.querySelector('.empty-state');
-    if (emptyState) emptyState.remove();
-
-    var currentIds = {};
-    channels.forEach(function (ch) {
-      currentIds[ch.id] = true;
-    });
-
-    container.querySelectorAll('.card[data-channel-id]').forEach(function (card) {
-      if (!currentIds[card.getAttribute('data-channel-id')]) card.remove();
-    });
-
-    channels.forEach(function (ch) {
-      var existing = container.querySelector('.card[data-channel-id="' + CSS.escape(ch.id) + '"]');
-      var html = buildChannelCard(ch);
-      if (existing) {
-        if (existing.innerHTML !== html) existing.innerHTML = html;
-      } else {
-        var div = document.createElement('div');
-        div.className = 'card no-anim';
-        div.setAttribute('data-channel-id', ch.id);
-        div.innerHTML = html;
-        container.appendChild(div);
-      }
-    });
-
-    container.querySelectorAll('.card[data-channel-id]').forEach(function (card) {
-      if (!card._bound) {
-        card._bound = true;
-        card.addEventListener('click', function () {
-          setMessageFilter('channel', this.getAttribute('data-channel-id'));
-        });
-      }
-    });
+    morph(
+      container,
+      channels
+        .map(function (ch) {
+          return (
+            '<div class="card" data-channel-id="' +
+            escAttr(ch.id) +
+            '">' +
+            buildChannelCard(ch) +
+            '</div>'
+          );
+        })
+        .join(''),
+    );
   }
 
   function renderState() {
@@ -1033,40 +996,45 @@
     }
 
     if (filtered.length === 0) {
-      tbody.innerHTML =
+      morph(
+        tbody,
         '<tr><td colspan="5" class="empty-state">' +
-        (filter
-          ? 'No matching entries'
-          : '<span class="material-symbols-outlined empty-state-icon">database</span>No shared state') +
-        '</td></tr>';
+          (filter
+            ? 'No matching entries'
+            : '<span class="material-symbols-outlined empty-state-icon">database</span>No shared state') +
+          '</td></tr>',
+      );
       return;
     }
 
-    tbody.innerHTML = filtered
-      .map(function (e) {
-        return (
-          '<tr>' +
-          '<td>' +
-          esc(e.namespace) +
-          '</td>' +
-          '<td>' +
-          esc(e.key) +
-          '</td>' +
-          '<td class="value-cell" title="' +
-          escAttr(e.value) +
-          '">' +
-          esc(e.value) +
-          '</td>' +
-          '<td>' +
-          esc(resolveAgentName(e.updated_by)) +
-          '</td>' +
-          '<td>' +
-          timeAgo(e.updated_at) +
-          '</td>' +
-          '</tr>'
-        );
-      })
-      .join('');
+    morph(
+      tbody,
+      filtered
+        .map(function (e) {
+          return (
+            '<tr>' +
+            '<td>' +
+            esc(e.namespace) +
+            '</td>' +
+            '<td>' +
+            esc(e.key) +
+            '</td>' +
+            '<td class="value-cell" title="' +
+            escAttr(e.value) +
+            '">' +
+            esc(e.value) +
+            '</td>' +
+            '<td>' +
+            esc(resolveAgentName(e.updated_by)) +
+            '</td>' +
+            '<td>' +
+            timeAgo(e.updated_at) +
+            '</td>' +
+            '</tr>'
+          );
+        })
+        .join(''),
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -1355,6 +1323,35 @@
       }
     });
     renderMessageDetail(msgId, threadRoots);
+  });
+
+  // Event delegation for morphdom-managed containers (listeners survive DOM diffs)
+  document.getElementById('agents-list').addEventListener('click', function (e) {
+    var card = e.target.closest('.agent-card[data-agent-id]');
+    if (card) setMessageFilter('agent', card.getAttribute('data-agent-id'));
+  });
+  document.getElementById('channels-list').addEventListener('click', function (e) {
+    var card = e.target.closest('[data-channel-id]');
+    if (card) setMessageFilter('channel', card.getAttribute('data-channel-id'));
+  });
+  document.getElementById('overview-agents').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-agent-id]');
+    if (el) setMessageFilter('agent', el.getAttribute('data-agent-id'));
+  });
+  document.getElementById('overview-activity').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-msg-id]');
+    if (!el) return;
+    var msgId = parseInt(el.getAttribute('data-msg-id'), 10);
+    selectedMessageId = msgId;
+    messageFilters.agent = null;
+    messageFilters.channel = null;
+    location.hash = 'messages';
+    switchView('messages');
+    renderMessages();
+    setTimeout(function () {
+      var target = document.querySelector('.msg-compact[data-msg-id="' + msgId + '"]');
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
   });
 
   window.addEventListener('hashchange', handleHash);
