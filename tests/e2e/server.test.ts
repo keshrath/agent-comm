@@ -214,32 +214,35 @@ describe('WebSocket E2E', () => {
     expect(data).toHaveProperty('messages');
   });
 
-  it('receives event on agent registration', async () => {
-    const events = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
-      const collected: Record<string, unknown>[] = [];
+  it('picks up agent registration via DB poll', async () => {
+    const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
       const client = new WebSocket(`ws://localhost:${port}`);
-      let gotState = false;
+      let gotInitial = false;
 
       client.on('message', (raw: Buffer) => {
         const msg = JSON.parse(raw.toString());
-        if (msg.type === 'state' && !gotState) {
-          gotState = true;
-          ctx.agents.register({ name: 'ws-test-agent' });
-        } else if (msg.type === 'agent:registered') {
-          collected.push(msg);
-          client.close();
-          resolve(collected);
+        if (msg.type === 'state' && !gotInitial) {
+          gotInitial = true;
+          // Mutate DB — poll will detect this
+          ctx.agents.register({ name: 'ws-poll-agent' });
+        } else if (msg.type === 'state' && gotInitial) {
+          // Second state push from poll — should include the new agent
+          const agents = (msg.agents || []) as { name: string }[];
+          if (agents.some((a) => a.name === 'ws-poll-agent')) {
+            client.close();
+            resolve(msg);
+          }
         }
       });
       client.on('error', reject);
       setTimeout(() => {
         client.close();
-        resolve(collected);
-      }, 5000);
+        reject(new Error('Timeout'));
+      }, 10000);
     });
 
-    expect(events.length).toBeGreaterThan(0);
-    expect(events[0].type).toBe('agent:registered');
+    const agents = (data.agents || []) as { name: string }[];
+    expect(agents.some((a) => a.name === 'ws-poll-agent')).toBe(true);
   });
 
   it('responds to refresh request', async () => {
@@ -297,66 +300,77 @@ describe('WebSocket E2E', () => {
     expect(data).toHaveProperty('reactions');
   });
 
-  it('pushes state:changed event with value and updated_by', async () => {
-    const event = await new Promise<Record<string, unknown>>((resolve, reject) => {
+  it('picks up state changes via DB poll', async () => {
+    const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
       const client = new WebSocket(`ws://localhost:${port}`);
-      let gotState = false;
+      let gotInitial = false;
 
       client.on('message', (raw: Buffer) => {
         const parsed = JSON.parse(raw.toString());
-        if (parsed.type === 'state' && !gotState) {
-          gotState = true;
+        if (parsed.type === 'state' && !gotInitial) {
+          gotInitial = true;
           const agent =
             ctx.agents.getByName('e2e-agent') ?? ctx.agents.register({ name: 'e2e-state-agent' });
           ctx.state.set('ws-ns', 'ws-key', 'ws-val', agent.id);
-        } else if (parsed.type === 'state:changed') {
-          client.close();
-          resolve(parsed);
+        } else if (parsed.type === 'state' && gotInitial) {
+          const entries = (parsed.state || []) as {
+            namespace: string;
+            key: string;
+            value: string;
+          }[];
+          if (entries.some((e) => e.namespace === 'ws-ns' && e.key === 'ws-key')) {
+            client.close();
+            resolve(parsed);
+          }
         }
       });
       client.on('error', reject);
       setTimeout(() => {
         client.close();
         reject(new Error('Timeout'));
-      }, 5000);
+      }, 10000);
     });
 
-    expect(event.type).toBe('state:changed');
-    const data = (event as { data: Record<string, unknown> }).data;
-    expect(data.namespace).toBe('ws-ns');
-    expect(data.key).toBe('ws-key');
-    expect(data.value).toBe('ws-val');
-    expect(data.updated_by).toBeDefined();
+    const entries = (data.state || []) as { namespace: string; key: string; value: string }[];
+    const entry = entries.find((e) => e.namespace === 'ws-ns' && e.key === 'ws-key');
+    expect(entry).toBeDefined();
+    expect(entry!.value).toBe('ws-val');
   });
 
-  it('pushes message:reacted event', async () => {
+  it('picks up reactions via DB poll', async () => {
     const agent =
       ctx.agents.getByName('e2e-agent') ?? ctx.agents.register({ name: 'e2e-react-agent' });
-    const msg = ctx.messages.send(agent.id, { to: agent.id, content: 'react-ws-test' });
+    // Use a channel message so it appears in public state (DMs are filtered out)
+    let ch = ctx.channels.getByName('react-test-ch');
+    if (!ch) ch = ctx.channels.create('react-test-ch', agent.id);
+    const msg = ctx.messages.send(agent.id, { channel: ch.id, content: 'react-ws-test' });
 
-    const event = await new Promise<Record<string, unknown>>((resolve, reject) => {
+    const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
       const client = new WebSocket(`ws://localhost:${port}`);
-      let gotState = false;
+      let gotInitial = false;
 
       client.on('message', (raw: Buffer) => {
         const parsed = JSON.parse(raw.toString());
-        if (parsed.type === 'state' && !gotState) {
-          gotState = true;
+        if (parsed.type === 'state' && !gotInitial) {
+          gotInitial = true;
           ctx.reactions.react(msg.id, agent.id, 'fire');
-        } else if (parsed.type === 'message:reacted') {
-          client.close();
-          resolve(parsed);
+        } else if (parsed.type === 'state' && gotInitial) {
+          const reactions = parsed.reactions || {};
+          if (reactions[msg.id]) {
+            client.close();
+            resolve(parsed);
+          }
         }
       });
       client.on('error', reject);
       setTimeout(() => {
         client.close();
         reject(new Error('Timeout'));
-      }, 5000);
+      }, 10000);
     });
 
-    expect(event.type).toBe('message:reacted');
-    const data = (event as { data: Record<string, unknown> }).data;
-    expect(data.reaction).toBe('fire');
+    const reactions = (data.reactions || {}) as Record<string, { reaction: string }[]>;
+    expect(reactions[msg.id]).toBeDefined();
+    expect(reactions[msg.id].some((r) => r.reaction === 'fire')).toBe(true);
   });
 });

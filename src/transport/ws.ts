@@ -1,10 +1,10 @@
 // =============================================================================
 // agent-comm — WebSocket transport
 //
-// Real-time event streaming to connected UI/API clients.
-// Subscribes to the event bus and pushes individual events.
-// Full state is sent once on connect and on explicit refresh requests.
-// Uses WebSocket ping/pong for connection health detection.
+// Real-time state streaming to connected UI clients.
+// Full state sent on connect; DB fingerprint polled every 2s to detect
+// changes from any MCP process (each has its own in-memory EventBus,
+// so cross-process events require DB-level change detection).
 // =============================================================================
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -13,7 +13,6 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { AppContext } from '../context.js';
-import type { EventType } from '../types.js';
 
 const __ws_dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__ws_dirname, '..', '..', 'package.json'), 'utf8'));
@@ -21,6 +20,7 @@ const pkg = JSON.parse(readFileSync(join(__ws_dirname, '..', '..', 'package.json
 const MAX_WS_MESSAGE_SIZE = 4096;
 const MAX_WS_CONNECTIONS = 50;
 const PING_INTERVAL_MS = 30_000;
+const DB_POLL_INTERVAL_MS = 2_000;
 
 export interface WebSocketHandle {
   wss: WebSocketServer;
@@ -29,28 +29,7 @@ export interface WebSocketHandle {
 
 interface ClientState {
   alive: boolean;
-  unsub: () => void;
-  /** If set, only forward events matching these types (empty = all events) */
-  subscribedEvents: Set<EventType | '*'>;
 }
-
-const VALID_EVENT_TYPES: ReadonlySet<string> = new Set<string>([
-  '*',
-  'agent:registered',
-  'agent:updated',
-  'agent:offline',
-  'channel:created',
-  'channel:archived',
-  'channel:member_joined',
-  'channel:member_left',
-  'message:sent',
-  'message:read',
-  'message:acked',
-  'message:reacted',
-  'message:unreacted',
-  'state:changed',
-  'state:deleted',
-]);
 
 export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHandle {
   const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_WS_MESSAGE_SIZE });
@@ -62,26 +41,12 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
       return;
     }
 
-    const state: ClientState = {
-      alive: true,
-      subscribedEvents: new Set(),
-      unsub: ctx.events.on('*', (event) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
-        if (state.subscribedEvents.size > 0) {
-          if (!state.subscribedEvents.has('*') && !state.subscribedEvents.has(event.type)) {
-            return;
-          }
-        }
-        ws.send(JSON.stringify(event));
-      }),
-    };
-    clients.set(ws, state);
-
-    // Send full state once on connect so the client has a baseline
+    clients.set(ws, { alive: true });
     sendFullState(ws, ctx);
 
     ws.on('pong', () => {
-      state.alive = true;
+      const s = clients.get(ws);
+      if (s) s.alive = true;
     });
 
     ws.on('message', (raw: Buffer) => {
@@ -98,63 +63,20 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
         return;
       }
 
-      const msg = parsed as { type: string; [key: string]: unknown };
+      const msg = parsed as { type: string };
 
-      if (typeof msg.type !== 'string') {
-        ws.send(JSON.stringify({ type: 'error', message: 'Missing type field' }));
-        return;
-      }
-
-      switch (msg.type) {
-        case 'refresh':
-          sendFullState(ws, ctx);
-          break;
-
-        case 'subscribe': {
-          const events = msg.events;
-          if (!Array.isArray(events)) {
-            ws.send(
-              JSON.stringify({
-                type: 'error',
-                message: '"events" must be an array of event type strings',
-              }),
-            );
-            break;
-          }
-          state.subscribedEvents.clear();
-          for (const e of events) {
-            if (typeof e === 'string' && VALID_EVENT_TYPES.has(e)) {
-              state.subscribedEvents.add(e as EventType | '*');
-            }
-          }
-          ws.send(JSON.stringify({ type: 'subscribed', events: [...state.subscribedEvents] }));
-          break;
-        }
-
-        default: {
-          const safeType = String(msg.type)
-            .slice(0, 64)
-            .replace(/[<>&"']/g, '');
-          ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${safeType}` }));
-        }
+      if (msg.type === 'refresh') {
+        sendFullState(ws, ctx);
+      } else {
+        const safeType = String(msg.type)
+          .slice(0, 64)
+          .replace(/[<>&"']/g, '');
+        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${safeType}` }));
       }
     });
 
-    ws.on('error', () => {
-      const s = clients.get(ws);
-      if (s) {
-        s.unsub();
-        clients.delete(ws);
-      }
-    });
-
-    ws.on('close', () => {
-      const s = clients.get(ws);
-      if (s) {
-        s.unsub();
-        clients.delete(ws);
-      }
-    });
+    ws.on('error', () => clients.delete(ws));
+    ws.on('close', () => clients.delete(ws));
   });
 
   // Ping/pong heartbeat to detect dead connections
@@ -171,12 +93,33 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
   }, PING_INTERVAL_MS);
   pingInterval.unref();
 
+  // Poll DB for changes from any MCP process. A lightweight fingerprint
+  // query covers all tables; on change we push a full state snapshot.
+  let lastFingerprint = '';
+  const dbPollInterval = setInterval(() => {
+    if (clients.size === 0) return;
+    try {
+      const fp = getFingerprint(ctx);
+      if (fp !== lastFingerprint) {
+        lastFingerprint = fp;
+        for (const [ws] of clients) {
+          if (ws.readyState === WebSocket.OPEN) {
+            sendFullState(ws, ctx);
+          }
+        }
+      }
+    } catch {
+      /* ignore poll errors — DB may be briefly locked */
+    }
+  }, DB_POLL_INTERVAL_MS);
+  dbPollInterval.unref();
+
   return {
     wss,
     close() {
       clearInterval(pingInterval);
-      for (const [ws, state] of clients) {
-        state.unsub();
+      clearInterval(dbPollInterval);
+      for (const [ws] of clients) {
         ws.close(1001, 'Server shutting down');
       }
       clients.clear();
@@ -185,19 +128,30 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
   };
 }
 
+/** Cheap fingerprint across all dashboard-relevant tables. */
+function getFingerprint(ctx: AppContext): string {
+  const row = ctx.db.queryOne<{ fp: string }>(
+    `SELECT
+       COALESCE((SELECT MAX(id) FROM messages), 0)
+       || ':' || COALESCE((SELECT COUNT(*) FROM agents WHERE status != 'offline'), 0)
+       || ':' || COALESCE((SELECT MAX(registered_at) FROM agents), '')
+       || ':' || COALESCE((SELECT COUNT(*) FROM channels), 0)
+       || ':' || COALESCE((SELECT COUNT(*) FROM state), 0)
+       || ':' || COALESCE((SELECT MAX(rowid) FROM state), 0)
+       || ':' || COALESCE((SELECT COUNT(*) FROM message_reactions), 0)
+     AS fp`,
+  );
+  return row?.fp ?? '';
+}
+
 function sendFullState(ws: WebSocket, ctx: AppContext): void {
   try {
-    // Only send channel messages and broadcasts in the public state feed.
-    // Direct messages (to_agent set, no channel) are private and should not
-    // be broadcast to all dashboard clients — that would leak DMs.
-    // Filter to last 24h so stale messages from previous sessions don't show.
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
       .toISOString()
       .replace('T', ' ')
       .slice(0, 19);
     const allMessages = ctx.messages.list({ limit: 50, since });
     const publicMessages = allMessages.filter((m) => m.channel_id !== null || m.to_agent === null);
-
     const messageIds = publicMessages.map((m) => m.id);
     const reactions = ctx.reactions.getForMessages(messageIds);
 
