@@ -1,5 +1,11 @@
 # agent-comm
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
+[![Tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-33-purple)]()
+[![REST Endpoints](https://img.shields.io/badge/REST-22%20endpoints-orange)]()
+
 **Agent-agnostic intercommunication system.** Lets AI coding agents — Claude Code, Codex CLI, Gemini CLI, Aider, or any custom tool — talk to each other, share state, and coordinate work in real time.
 
 | Light Theme                                | Dark Theme                                     |
