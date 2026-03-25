@@ -2,9 +2,9 @@
 // agent-comm — Dashboard client
 //
 // Rendering strategy:
-//   - Full state snapshot on connect (type: "state") → full render
-//   - Individual events → incremental state mutation + targeted re-render
-//   - No polling, no periodic full refreshes
+//   - Full state snapshot on connect and every 2s via DB poll (type: "state")
+//   - Client-side fingerprint comparison skips re-render when data unchanged
+//   - Only re-renders DOM when state actually differs
 // =============================================================================
 
 (function () {
@@ -81,6 +81,24 @@
   // Full state (connect + explicit refresh only)
   // -----------------------------------------------------------------------
 
+  // Fingerprint cache: skip re-renders when data hasn't changed
+  var lastStateFingerprint = '';
+
+  function quickFingerprint(data) {
+    var msgs = data.messages || [];
+    var agents = data.agents || [];
+    var fp = (data.messageCount || msgs.length) + ':' + msgs.length + ':' + agents.length;
+    // Include latest message ID and agent statuses for fine-grained change detection
+    if (msgs.length > 0) fp += ':m' + msgs[0].id;
+    for (var i = 0; i < agents.length; i++) {
+      fp += ':' + agents[i].id + '.' + agents[i].status;
+    }
+    fp += '|' + (data.channels || []).length;
+    fp += '|' + (data.state || []).length;
+    fp += '|' + JSON.stringify(data.reactions || {});
+    return fp;
+  }
+
   function handleFullState(data) {
     if (!loaded) {
       loaded = true;
@@ -95,6 +113,12 @@
         { once: true },
       );
     }
+
+    // Skip re-render if nothing changed
+    var fp = quickFingerprint(data);
+    if (fp === lastStateFingerprint) return;
+    lastStateFingerprint = fp;
+
     state = data;
     state.messageCount = data.messageCount || data.messages.length;
     state.reactions = data.reactions || {};
