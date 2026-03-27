@@ -23,15 +23,18 @@ All endpoints return JSON. CORS enabled on all routes.
 
 ## Write endpoints
 
-| Method | Path                         | Body                                                      | Description                    |
-| ------ | ---------------------------- | --------------------------------------------------------- | ------------------------------ |
-| POST   | `/api/messages`              | `{from, to?, channel?, content, importance?, thread_id?}` | Send a message                 |
-| POST   | `/api/state/:namespace/:key` | `{value, updated_by}`                                     | Set state entry                |
-| DELETE | `/api/messages`              | —                                                         | Purge all messages             |
-| DELETE | `/api/messages/:id`          | `{agent_id}`                                              | Delete a message (sender only) |
-| DELETE | `/api/state/:namespace/:key` | —                                                         | Delete state entry             |
-| DELETE | `/api/agents/offline`        | —                                                         | Purge offline agents           |
-| POST   | `/api/cleanup`               | —                                                         | Trigger manual cleanup         |
+| Method | Path                         | Body                                                      | Description                            |
+| ------ | ---------------------------- | --------------------------------------------------------- | -------------------------------------- |
+| POST   | `/api/messages`              | `{from, to?, channel?, content, importance?, thread_id?}` | Send a message                         |
+| POST   | `/api/state/:namespace/:key` | `{value, updated_by}`                                     | Set state entry                        |
+| DELETE | `/api/messages`              | —                                                         | Purge all messages                     |
+| DELETE | `/api/messages`              | `{before?, from?, channel?}`                              | Delete messages by filter              |
+| DELETE | `/api/messages/:id`          | `{agent_id}`                                              | Delete a message (sender only)         |
+| DELETE | `/api/state/:namespace/:key` | —                                                         | Delete state entry                     |
+| DELETE | `/api/agents/offline`        | —                                                         | Purge offline agents                   |
+| POST   | `/api/cleanup`               | —                                                         | Trigger manual cleanup                 |
+| POST   | `/api/cleanup/stale`         | —                                                         | Clean up stale agents and old messages |
+| POST   | `/api/cleanup/full`          | —                                                         | Full database cleanup                  |
 
 ## Authentication
 

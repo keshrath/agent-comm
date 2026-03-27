@@ -51,4 +51,4 @@ npm run dev        # watch mode (tsc + nodemon)
 
 - **REST**: `GET /health`, `GET /api/agents`, `GET /api/messages`, `GET /api/channels`, `GET /api/state`, `POST /api/cleanup/stale`, `POST /api/cleanup/full`
 - **WebSocket**: Full state on connect, incremental events streamed, `refresh` request supported
-- **MCP**: 30+ tools (`comm_register`, `comm_send`, `comm_channel_*`, `comm_state_*`, etc.)
+- **MCP**: 33 tools (`comm_register`, `comm_send`, `comm_channel_*`, `comm_state_*`, etc.)

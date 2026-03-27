@@ -4,7 +4,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)]()
 [![MCP Tools](https://img.shields.io/badge/MCP%20tools-33-purple)]()
-[![REST Endpoints](https://img.shields.io/badge/REST-22%20endpoints-orange)]()
+[![REST Endpoints](https://img.shields.io/badge/REST-24%20endpoints-orange)]()
 
 **Agent-agnostic intercommunication system.** Lets AI coding agents — Claude Code, Codex CLI, Gemini CLI, Aider, or any custom tool — talk to each other, share state, and coordinate work in real time.
 
@@ -102,7 +102,7 @@ node dist/server.js --port 3421
 npm run setup
 ```
 
-Registers the MCP server, adds lifecycle [hooks](docs/hooks.md), and configures permissions.
+Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and configures permissions.
 
 ## MCP tools (33)
 
@@ -161,7 +161,7 @@ Registers the MCP server, adds lifecycle [hooks](docs/hooks.md), and configures 
 
 ## REST API
 
-All endpoints return JSON. CORS enabled. See [full API reference](docs/api.md) for details.
+All endpoints return JSON. CORS enabled. See [full API reference](docs/API.md) for details.
 
 ```
 GET  /health                              Server status + uptime
@@ -182,10 +182,13 @@ GET  /api/export                          Full database export as JSON
 POST   /api/messages                      Send a message (body: {from, to?, channel?, content})
 POST   /api/state/:namespace/:key         Set state (body: {value, updated_by})
 DELETE /api/messages                       Purge all messages
+DELETE /api/messages                       Delete messages by filter
 DELETE /api/messages/:id                   Delete a message (body: {agent_id})
 DELETE /api/state/:namespace/:key          Delete state entry
 DELETE /api/agents/offline                 Purge offline agents
 POST   /api/cleanup                       Trigger manual cleanup
+POST   /api/cleanup/stale                 Clean up stale agents and old messages
+POST   /api/cleanup/full                  Full database cleanup
 ```
 
 ## Communication patterns
@@ -239,9 +242,9 @@ npm run check         # Full CI: typecheck + lint + format + test
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — source structure, design principles, database schema
-- [Dashboard](docs/dashboard.md) — web UI views and features
-- [Hooks](docs/hooks.md) — Claude Code lifecycle hooks
+- [Setup Guide](docs/SETUP.md) — installation, client setup (Claude Code, OpenCode, Cursor, Windsurf), hooks
+- [Architecture](docs/ARCHITECTURE.md) — source structure, design principles, database schema
+- [Dashboard](docs/DASHBOARD.md) — web UI views and features
 - [Changelog](CHANGELOG.md)
 
 ## License
