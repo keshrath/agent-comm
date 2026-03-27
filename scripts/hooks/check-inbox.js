@@ -3,9 +3,10 @@
 // =============================================================================
 // agent-comm PostToolUse hook
 //
-// After every tool call (except agent-comm's own tools), checks if there are
-// recent messages and nudges the agent to call comm_inbox.
-// Silent when no recent messages (~0 tokens per tool call).
+// After every tool call (except agent-comm's own tools), checks for unread
+// messages and nudges the agent to call comm_inbox.
+// Also periodically reminds agents to communicate (status updates, state).
+// Silent when nothing to report.
 // =============================================================================
 
 import { existsSync } from 'fs';
@@ -39,19 +40,47 @@ process.stdin.on('end', () => {
     const Database = require('better-sqlite3');
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
-    const row = db
+    const msgRow = db
       .prepare(
-        `SELECT COUNT(*) as cnt FROM messages WHERE created_at > datetime('now', '-2 minutes')`,
+        `SELECT COUNT(*) as cnt FROM messages WHERE created_at > datetime('now', '-10 minutes')`,
       )
       .get();
 
+    const agentRow = db
+      .prepare(`SELECT COUNT(*) as cnt FROM agents WHERE status IN ('online', 'idle')`)
+      .get();
+
+    const pid = process.ppid || process.pid;
+    const lastSent = db
+      .prepare(
+        `SELECT MAX(created_at) as last_msg FROM messages
+         WHERE created_at > datetime('now', '-15 minutes')
+         AND sender_id IN (SELECT id FROM agents WHERE pid = ?)`,
+      )
+      .get(pid);
+
     db.close();
 
-    if (row.cnt > 0) {
+    const parts = [];
+
+    if (msgRow.cnt > 0) {
+      parts.push(
+        `You have unread messages (${msgRow.cnt} in last 10 min). You MUST call comm_inbox now.`,
+      );
+    }
+
+    // If other agents are online and this agent hasn't communicated in 15 min, nudge
+    if (agentRow.cnt > 1 && !lastSent?.last_msg) {
+      parts.push(
+        `${agentRow.cnt} agents online but you haven't communicated recently. Post a status update to "general" or set your status with comm_set_status.`,
+      );
+    }
+
+    if (parts.length > 0) {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
-            additionalContext: `${row.cnt} new message(s) in last 2 min. Call comm_inbox.`,
+            additionalContext: parts.join(' '),
           },
         }),
       );

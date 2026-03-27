@@ -3,11 +3,7 @@
 // =============================================================================
 // agent-comm UserPromptSubmit hook
 //
-// Two checks:
-// 1. If no agents online → nudge registration
-// 2. If agents online → check for recent messages and nudge inbox check
-//
-// Silent (empty JSON) when registered and no recent activity.
+// Checks registration status and nudges communication.
 // =============================================================================
 
 import { existsSync } from 'fs';
@@ -17,7 +13,6 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 
-// Fail-open: never let hook crash block the user
 process.on('uncaughtException', (err) => {
   process.stderr.write(`[agent-comm hook] fatal: ${err.message}\n`);
   process.exit(0);
@@ -37,15 +32,18 @@ function check() {
 
     const msgRow = db
       .prepare(
-        `SELECT COUNT(*) as cnt FROM messages WHERE created_at > datetime('now', '-5 minutes')`,
+        `SELECT COUNT(*) as cnt FROM messages WHERE created_at > datetime('now', '-10 minutes')`,
       )
       .get();
+
+    const stateRow = db.prepare(`SELECT COUNT(*) as cnt FROM state`).get();
 
     db.close();
     return {
       registered: agentRow.cnt > 0,
       onlineAgents: agentRow.cnt,
       recentMessages: msgRow.cnt,
+      stateEntries: stateRow.cnt,
     };
   } catch (err) {
     process.stderr.write(`[agent-comm hook] ${err.message}\n`);
@@ -74,7 +72,15 @@ function run() {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
-            additionalContext: `${onlineAgents} agent(s) online, ${recentMessages} message(s) in last 5 min. Call comm_inbox to check for updates.`,
+            additionalContext: `${onlineAgents} agent(s) online, ${recentMessages} message(s) in last 10 min. Call comm_inbox NOW before starting this work.`,
+          },
+        }),
+      );
+    } else if (onlineAgents > 1) {
+      console.log(
+        JSON.stringify({
+          hookSpecificOutput: {
+            additionalContext: `${onlineAgents} agents online. Consider posting a status update to "general" or using comm_state_set to share your progress.`,
           },
         }),
       );

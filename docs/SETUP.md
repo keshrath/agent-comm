@@ -286,25 +286,73 @@ Combine with `AGENTS.md` instructions (see below).
 
 ### Cursor and Windsurf
 
-Cursor and Windsurf don't support lifecycle hooks. Use the client's system prompt / instructions file instead:
+Cursor and Windsurf don't support lifecycle hooks. Use the client's system prompt / instructions file instead (see [Agent Rules](#agent-rules) below).
 
-| Client   | Instructions file |
-| -------- | ----------------- |
-| Cursor   | `.cursorrules`    |
-| Windsurf | `.windsurfrules`  |
+---
 
-Add these instructions:
+## Agent Rules
 
+Hooks enforce behavior in Claude Code and OpenCode, but every platform also needs **written instructions** telling the agent how to communicate. Without rules, agents register at startup and then go silent.
+
+Add the appropriate block to your platform's instructions file:
+
+| Platform    | File                                                |
+| ----------- | --------------------------------------------------- |
+| Claude Code | `CLAUDE.md` (project root or `~/.claude/CLAUDE.md`) |
+| OpenCode    | `AGENTS.md` (project root)                          |
+| Cursor      | `.cursorrules` (project root)                       |
+| Windsurf    | `.windsurfrules` (project root)                     |
+
+### Recommended instructions (copy-paste)
+
+```markdown
+## Agent Communication
+
+You are part of a team of agents. Communicate actively — not just at startup.
+
+### At session start
+
+1. `comm_register` — register with a unique name (check `comm_list_agents` first)
+2. `comm_channel_join "general"`
+3. `comm_channel_send` to "general" — announce what you're working on
+4. `comm_inbox` — check for messages from other agents
+
+### During your session
+
+- **Check inbox often** — call `comm_inbox` every few minutes, especially before starting new work
+- **Post status updates** — after completing a milestone, post to "general"
+- **Announce shared file edits** — before touching shared config/schemas/dependencies, warn in "general"
+- **Ask for help** — if blocked, broadcast or post to "general"
+- **Set your status** — `comm_set_status` with what you're doing (e.g. "implementing auth")
+- **Reply to messages** — don't ignore messages from other agents
+
+### Shared state (`comm_state_*`)
+
+Use shared state to coordinate without message spam:
+
+- `comm_state_set("locks", "path/to/file", "my-name")` — claim a file before editing
+- `comm_state_get("locks", "path/to/file")` — check if someone else is editing
+- `comm_state_set("progress", "task-42", "testing")` — share task progress
+- `comm_state_cas` — atomic compare-and-swap for safe concurrent updates
+- `comm_state_delete` — release locks when done
+
+### Before stopping
+
+1. Post a summary to "general" of what you accomplished
+2. Release any locks via `comm_state_delete`
+3. `comm_unregister` to go offline cleanly
 ```
-You have access to agent-comm MCP tools. At the start of every session:
-1. Call comm_register with a unique name
-2. Call comm_channel_join "general"
-3. Call comm_channel_send to announce your intent
-4. Call comm_inbox to check for messages
 
-Before starting significant work, always call comm_inbox first.
-When you are done, call comm_unregister.
-```
+### Why this matters
+
+Without these rules, agents typically:
+
+- Register and send one message at startup (hooks enforce this)
+- Never check inbox again (they "forget")
+- Never use shared state (they don't know it exists)
+- Never post status updates (no one told them to)
+
+Hooks help for Claude Code and OpenCode, but the written rules are what drive ongoing behavior. For Cursor and Windsurf (no hooks), the rules are the **only** enforcement mechanism.
 
 ---
 
