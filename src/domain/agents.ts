@@ -138,14 +138,35 @@ export class AgentService {
     return agents;
   }
 
-  heartbeat(agentId: string): void {
-    const result = this.db.run(
-      `UPDATE agents SET last_heartbeat = datetime('now'), status = 'online'
-       WHERE id = ? AND status != 'offline'`,
-      [agentId],
-    );
-    if (result.changes === 0) {
-      throw new NotFoundError('Agent', agentId);
+  heartbeat(agentId: string, statusText?: string | null): void {
+    if (statusText !== undefined && statusText !== null) {
+      if (statusText.length > 256) {
+        throw new ValidationError('Status text exceeds maximum length of 256 characters.');
+      }
+      // eslint-disable-next-line no-control-regex
+      if (/[\x00-\x1f\x7f]/.test(statusText)) {
+        throw new ValidationError('Status text must not contain control characters.');
+      }
+    }
+
+    if (statusText !== undefined) {
+      const result = this.db.run(
+        `UPDATE agents SET last_heartbeat = datetime('now'), status = 'online', status_text = ?
+         WHERE id = ? AND status != 'offline'`,
+        [statusText, agentId],
+      );
+      if (result.changes === 0) {
+        throw new NotFoundError('Agent', agentId);
+      }
+    } else {
+      const result = this.db.run(
+        `UPDATE agents SET last_heartbeat = datetime('now'), status = 'online'
+         WHERE id = ? AND status != 'offline'`,
+        [agentId],
+      );
+      if (result.changes === 0) {
+        throw new NotFoundError('Agent', agentId);
+      }
     }
   }
 

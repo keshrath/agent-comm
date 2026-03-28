@@ -70,7 +70,15 @@ export const tools: ToolDefinition[] = [
   {
     name: 'comm_heartbeat',
     description: 'Send a heartbeat to keep this agent marked as online.',
-    inputSchema: { type: 'object', properties: {} },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status_text: {
+          type: 'string',
+          description: 'Optional status text to set with heartbeat (max 256 chars)',
+        },
+      },
+    },
   },
   {
     name: 'comm_unregister',
@@ -592,7 +600,10 @@ export function createToolHandler(ctx: AppContext): ToolHandler {
 
       case 'comm_heartbeat': {
         const self = requireAgent();
-        ctx.agents.heartbeat(self.id);
+        const statusText = optStringOrNull(args, 'status_text');
+        // undefined means not provided (leave unchanged), null means clear, string means set
+        const statusArg = args.status_text === undefined ? undefined : statusText;
+        ctx.agents.heartbeat(self.id, statusArg);
         return { success: true };
       }
 

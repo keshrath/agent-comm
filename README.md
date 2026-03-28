@@ -113,7 +113,7 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 | `comm_register`    | Register with name, capabilities, and metadata |
 | `comm_list_agents` | List agents (filter by status/capability)      |
 | `comm_whoami`      | Return this agent's identity                   |
-| `comm_heartbeat`   | Keep agent marked as online                    |
+| `comm_heartbeat`   | Keep agent online (optionally set status text) |
 | `comm_unregister`  | Go offline                                     |
 | `comm_set_status`  | Set status text (e.g. "working on X")          |
 
@@ -167,6 +167,7 @@ All endpoints return JSON. CORS enabled. See [full API reference](docs/API.md) f
 GET  /health                              Server status + uptime
 GET  /api/agents                          List online agents
 GET  /api/agents/:id                      Get agent by ID or name
+GET  /api/agents/:id/heartbeat             Agent liveness (status + heartbeat age)
 GET  /api/channels                        List active channels
 GET  /api/channels/:name                  Channel details + members
 GET  /api/channels/:name/members          Channel member list
@@ -190,6 +191,25 @@ POST   /api/cleanup                       Trigger manual cleanup
 POST   /api/cleanup/stale                 Clean up stale agents and old messages
 POST   /api/cleanup/full                  Full database cleanup
 ```
+
+## Agent visibility and status
+
+`comm_heartbeat` accepts an optional `status_text` parameter, letting agents update their visible status in the same call that keeps them online:
+
+```jsonc
+// MCP call — heartbeat + status update in one
+comm_heartbeat({ "status_text": "implementing auth module" })
+
+// Clear status text (pass null)
+comm_heartbeat({ "status_text": null })
+
+// Plain heartbeat — status text unchanged
+comm_heartbeat({})
+```
+
+**Claude Code agents** get automatic heartbeats and status via hooks (see [Setup docs](docs/SETUP.md)). **Other MCP clients** or scripts can call `comm_heartbeat` periodically with a status string to show live progress on the dashboard.
+
+The REST endpoint `GET /api/agents/:id/heartbeat` returns agent liveness info (status, heartbeat age in ms/s, status text) for external monitoring.
 
 ## Communication patterns
 

@@ -574,6 +574,18 @@ body {
 .status-dot.offline {
   background: var(--text-dim);
 }
+.hb-fresh {
+  color: var(--green);
+  font-weight: 600;
+}
+.hb-warm {
+  color: var(--yellow);
+  font-weight: 600;
+}
+.hb-stale {
+  color: var(--red);
+  font-weight: 600;
+}
 
 .capability-tag {
   display: inline-block;

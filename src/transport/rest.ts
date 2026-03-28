@@ -84,6 +84,25 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     json(res, agent);
   });
 
+  route('GET', '/api/agents/:id/heartbeat', (_req, res, params) => {
+    const agent = ctx.agents.getById(params.id) ?? ctx.agents.getByName(params.id);
+    if (!agent) return json(res, { error: 'Not found' }, 404);
+    const now = Date.now();
+    const hbTime = new Date(
+      agent.last_heartbeat + (agent.last_heartbeat.includes('Z') ? '' : 'Z'),
+    ).getTime();
+    const ageMs = Math.max(0, now - hbTime);
+    json(res, {
+      agent_id: agent.id,
+      name: agent.name,
+      status: agent.status,
+      status_text: agent.status_text,
+      last_heartbeat: agent.last_heartbeat,
+      heartbeat_age_ms: ageMs,
+      heartbeat_age_s: Math.floor(ageMs / 1000),
+    });
+  });
+
   route('GET', '/api/channels', (_req, res) => {
     json(res, ctx.channels.list());
   });

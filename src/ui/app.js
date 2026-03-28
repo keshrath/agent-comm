@@ -482,11 +482,24 @@
     morph(activityEl, activityHtml);
   }
 
+  function heartbeatFreshness(dateStr) {
+    if (!dateStr) return { text: '', cls: '' };
+    var now = Date.now();
+    var then = new Date(
+      dateStr + (dateStr.includes('Z') || dateStr.includes('+') ? '' : 'Z'),
+    ).getTime();
+    var seconds = Math.max(0, Math.floor((now - then) / 1000));
+    var text = timeAgo(dateStr);
+    var cls = seconds < 30 ? 'hb-fresh' : seconds < 120 ? 'hb-warm' : 'hb-stale';
+    return { text: text, cls: cls };
+  }
+
   function buildAgentCard(a) {
     var caps = parseCaps(a);
     var msgCount = (state.messages || []).filter(function (m) {
       return m.from_agent === a.id || m.to_agent === a.id;
     }).length;
+    var hb = heartbeatFreshness(a.last_heartbeat);
     return (
       '<div class="card-title"><span class="status-dot ' +
       esc(a.status) +
@@ -496,9 +509,11 @@
       (a.status_text ? '<div class="card-meta status-text">' + esc(a.status_text) + '</div>' : '') +
       '<div class="card-meta">Status: ' +
       esc(a.status) +
-      ' &middot; Heartbeat: ' +
-      timeAgo(a.last_heartbeat) +
-      '</div>' +
+      ' &middot; Heartbeat: <span class="' +
+      hb.cls +
+      '">' +
+      hb.text +
+      '</span></div>' +
       '<div class="card-meta">Registered: ' +
       timeAgo(a.registered_at) +
       '</div>' +
