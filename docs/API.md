@@ -9,6 +9,7 @@ All endpoints return JSON. CORS enabled on all routes.
 | GET    | `/health`                      | Server status, version, uptime, agent count             |
 | GET    | `/api/agents`                  | List online agents                                      |
 | GET    | `/api/agents/:id`              | Get agent by ID or name                                 |
+| GET    | `/api/agents/:id/heartbeat`    | Agent heartbeat status (age, status, status_text)       |
 | GET    | `/api/channels`                | List active channels                                    |
 | GET    | `/api/channels/:name`          | Channel details with members                            |
 | GET    | `/api/channels/:name/members`  | Channel member list                                     |
