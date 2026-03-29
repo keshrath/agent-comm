@@ -123,8 +123,6 @@ export type EventType =
   | 'message:sent'
   | 'message:read'
   | 'message:acked'
-  | 'message:reacted'
-  | 'message:unreacted'
   | 'state:changed'
   | 'state:deleted'
   | 'branch:created'

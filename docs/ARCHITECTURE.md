@@ -20,9 +20,8 @@ src/
 │   ├── events.ts         # Typed in-process event bus (pub/sub with wildcards)
 │   ├── cleanup.ts        # Startup reset, periodic purge, manual message wipe
 │   ├── rate-limit.ts     # Per-agent token bucket rate limiter
-│   └── reactions.ts      # Message reactions (add/remove/query)
 ├── transport/
-│   ├── mcp.ts            # 12 MCP tool definitions + dispatch + input validation
+│   ├── mcp.ts            # 9 MCP tool definitions + dispatch + input validation
 │   ├── rest.ts           # HTTP router (node:http, zero frameworks) + static serving
 │   └── ws.ts             # WebSocket: real-time push, ping/pong, event filtering
 └── ui/
@@ -101,11 +100,6 @@ erDiagram
         text agent_id
         text acked_at
     }
-    message_reactions {
-        int message_id FK
-        text agent_id
-        text reaction
-    }
     state {
         text namespace PK
         text key PK
@@ -119,7 +113,6 @@ erDiagram
     channels ||--o{ messages : contains
     messages ||--o{ messages : threads
     messages ||--o{ message_reads : tracked_by
-    messages ||--o{ message_reactions : has
     agents ||--o{ feed_events : logs
 ```
 
@@ -157,16 +150,15 @@ npm run check        # Full CI: typecheck + lint + format + test
 
 ## Test suites
 
-| Suite                  | Tests | What it covers                                                               |
-| ---------------------- | ----- | ---------------------------------------------------------------------------- |
-| Domain: Agents         | 16    | Registration, discovery, heartbeat, reaper, validation                       |
-| Domain: Messages       | 22    | Send, inbox, threads, read/ack, search, edit/delete, broadcast               |
-| Domain: Channels       | 12    | Create, join/leave, archive, membership enforcement                          |
-| Domain: State          | 19    | CRUD, namespaces, CAS, key validation                                        |
-| Domain: Events         | 7     | Pub/sub, wildcards, unsubscribe, error isolation                             |
-| Domain: Rate limit     | 6     | Token bucket capacity, refill, isolation, reset                              |
-| Domain: Reactions      | 26    | React/unreact, validation, events, bulk queries, status text, channel update |
-| Domain: Edge cases     | 43    | Boundary values, injection prevention, concurrency, data integrity           |
-| Transport: MCP         | 41    | All 12 tools, auth gates, rate limiting, input validation                    |
-| Integration: Workflows | 10    | Multi-agent scenarios (coordination, CAS locking, forwarding, reactions)     |
-| E2E: Server            | 21    | REST endpoints, WebSocket state/events, export, error codes                  |
+| Suite                  | Tests | What it covers                                                        |
+| ---------------------- | ----- | --------------------------------------------------------------------- |
+| Domain: Agents         | 16    | Registration, discovery, heartbeat, reaper, validation                |
+| Domain: Messages       | 22    | Send, inbox, threads, read/ack, search, edit/delete, broadcast        |
+| Domain: Channels       | 12    | Create, join/leave, archive, membership enforcement                   |
+| Domain: State          | 19    | CRUD, namespaces, CAS, key validation                                 |
+| Domain: Events         | 7     | Pub/sub, wildcards, unsubscribe, error isolation                      |
+| Domain: Rate limit     | 6     | Token bucket capacity, refill, isolation, reset                       |
+| Domain: Edge cases     | 43    | Boundary values, injection prevention, concurrency, data integrity    |
+| Transport: MCP         | 34    | All 9 tools, auth gates, rate limiting, input validation              |
+| Integration: Workflows | 10    | Multi-agent scenarios (coordination, CAS locking, forwarding, search) |
+| E2E: Server            | 21    | REST endpoints, WebSocket state/events, export, error codes           |

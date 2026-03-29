@@ -60,14 +60,8 @@ describe('Multi-agent channel workflow', () => {
       content: 'Will prepare test fixtures while dev builds.',
     });
 
-    dev('comm_react', { message_id: task.id, reaction: 'in-progress' });
-    qa('comm_react', { message_id: task.id, reaction: 'acknowledged' });
-
-    const thread = lead('comm_message', { action: 'thread', message_id: task.id }) as unknown[];
+    const thread = lead('comm_inbox', { thread_id: task.id }) as unknown[];
     expect(thread).toHaveLength(3);
-
-    const reactions = ctx.reactions.getForMessage(task.id);
-    expect(reactions).toHaveLength(2);
   });
 });
 
@@ -99,7 +93,7 @@ describe('Agent discovery and direct messaging', () => {
     expect(inbox).toHaveLength(1);
     expect(inbox[0].ack_required).toBe(true);
 
-    feHandler('comm_message', { action: 'ack', message_id: inbox[0].id });
+    // ack feature removed — agents just read messages via inbox
   });
 });
 
@@ -225,41 +219,6 @@ describe('Channel lifecycle with description updates', () => {
     }[];
     const archived = channels.find((c) => c.name === 'temp-project');
     expect(archived?.archived_at).not.toBeNull();
-  });
-});
-
-describe('Reaction-based signaling', () => {
-  it('agents use reactions as lightweight status updates', () => {
-    const lead = agent('task-lead');
-    const w1 = agent('worker-1');
-    const w2 = agent('worker-2');
-
-    lead('comm_channel', { action: 'create', channel: 'tasks' });
-    w1('comm_channel', { action: 'join', channel: 'tasks' });
-    w2('comm_channel', { action: 'join', channel: 'tasks' });
-
-    const t1 = lead('comm_send', {
-      channel: 'tasks',
-      content: 'Task A: migrate DB schema',
-    }) as { id: number };
-    const t2 = lead('comm_send', {
-      channel: 'tasks',
-      content: 'Task B: update API docs',
-    }) as { id: number };
-
-    w1('comm_react', { message_id: t1.id, reaction: 'claimed' });
-    w2('comm_react', { message_id: t2.id, reaction: 'claimed' });
-
-    w1('comm_react', { message_id: t1.id, reaction: 'done' });
-    w1('comm_react', { action: 'remove', message_id: t1.id, reaction: 'claimed' });
-
-    const t1Reactions = ctx.reactions.getForMessage(t1.id);
-    expect(t1Reactions).toHaveLength(1);
-    expect(t1Reactions[0].reaction).toBe('done');
-
-    const t2Reactions = ctx.reactions.getForMessage(t2.id);
-    expect(t2Reactions).toHaveLength(1);
-    expect(t2Reactions[0].reaction).toBe('claimed');
   });
 });
 

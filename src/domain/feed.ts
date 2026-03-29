@@ -19,8 +19,11 @@ const VALID_TYPES = new Set([
   'error',
   'custom',
   'register',
+  'unregister',
   'message',
   'state_change',
+  'channel_join',
+  'channel_leave',
   'handoff',
   'branch',
 ]);

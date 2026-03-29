@@ -149,42 +149,26 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 4. comm_inbox — keep as-is
+  // 4. comm_inbox — with optional thread_id for thread retrieval
   {
     name: 'comm_inbox',
-    description: 'Read messages in your inbox (direct + channel messages).',
+    description:
+      'Read messages in your inbox (direct + channel messages). Set thread_id to get a specific thread instead.',
     inputSchema: {
       type: 'object',
       properties: {
         unread_only: { type: 'boolean', description: 'Only unread messages (default: true)' },
         limit: { type: 'number', description: 'Max messages (default: 50, max: 500)' },
-      },
-    },
-  },
-
-  // 5. comm_message — merged thread, mark_read, ack, edit_message, delete_message
-  {
-    name: 'comm_message',
-    description:
-      'Message operations. Actions: "thread" (get thread), "read" (mark read, omit message_id to mark all), "ack" (acknowledge), "edit" (edit content), "delete" (delete message).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        action: {
-          ...ACTION_REQUIRED,
-          enum: ['thread', 'read', 'ack', 'edit', 'delete'],
-        },
-        message_id: {
+        thread_id: {
           type: 'number',
-          description: 'Message ID (required for all actions except "read" to mark all)',
+          description:
+            'When provided, returns the full thread for this message ID instead of the inbox',
         },
-        content: { type: 'string', description: '[edit] New message content' },
       },
-      required: ['action'],
     },
   },
 
-  // 6. comm_channel — merged all channel tools except channel_send (in comm_send)
+  // 5. comm_channel — merged all channel tools except channel_send (in comm_send)
   {
     name: 'comm_channel',
     description:
@@ -243,61 +227,7 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 8. comm_react — merged react + unreact
-  {
-    name: 'comm_react',
-    description: 'Add or remove a reaction on a message.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        action: {
-          ...ACTION_REQUIRED,
-          enum: ['add', 'remove'],
-          description: '"add" to react, "remove" to unreact (default: "add")',
-        },
-        message_id: { type: 'number', description: 'Message ID' },
-        reaction: { type: 'string', description: 'Reaction text (1-32 chars, e.g. "done", "+1")' },
-      },
-      required: ['message_id', 'reaction'],
-    },
-  },
-
-  // 9. comm_feed — merged log_activity + feed query
-  {
-    name: 'comm_feed',
-    description:
-      'Activity feed. Actions: "log" (log a structured event), "query" (query feed with filters).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        action: {
-          ...ACTION_REQUIRED,
-          enum: ['log', 'query'],
-        },
-        // log
-        type: {
-          type: 'string',
-          description:
-            '[log] Event type: commit, test_pass, test_fail, file_edit, task_complete, error, custom. [query] Filter by type.',
-        },
-        target: {
-          type: 'string',
-          description: '[log] Target of the action (e.g. file path, test name)',
-        },
-        preview: { type: 'string', description: '[log] Short preview text (max 500 chars)' },
-        // query
-        agent: { type: 'string', description: '[query] Filter by agent name or ID' },
-        limit: {
-          type: 'number',
-          description: '[query] Max events to return (default: 50, max: 500)',
-        },
-        since: { type: 'string', description: '[query] Only events after this ISO timestamp' },
-      },
-      required: ['action'],
-    },
-  },
-
-  // 10. comm_branch — keep as-is (already consolidated)
+  // 8. comm_branch
   {
     name: 'comm_branch',
     description:

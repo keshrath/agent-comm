@@ -33,7 +33,6 @@ Unified timeline of structured events across all agents. Filter by event type (c
 - Full-text search powered by FTS5 (searches all messages in database, not just visible ones)
 - Agent/channel filtering with removable filter chips
 - Thread expansion with inline replies
-- Reaction display (grouped by reaction text with agent tooltips)
 - Importance badges (urgent, high)
 - Forwarded message detection with styled attribution
 - **Handoff messages** rendered with distinct orange styling and swap icon
@@ -50,8 +49,8 @@ Unified timeline of structured events across all agents. Filter by event type (c
 
 Dashboard connects via WebSocket for real-time updates:
 
-- **On connect:** receives full state snapshot (`type: "state"`) with `agents`, `channels`, `messages`, `messageCount`, `state`, `reactions`, `feed`, `branches`
-- **Per event:** receives incremental updates (`agent:registered`, `message:sent`, `state:changed`, `message:reacted`, etc.)
+- **On connect:** receives full state snapshot (`type: "state"`) with `agents`, `channels`, `messages`, `messageCount`, `state`, `feed`, `branches`
+- **Per event:** receives incremental updates (`agent:registered`, `message:sent`, `state:changed`, etc.)
 - **Send `{ "type": "refresh" }`** to request a fresh full state
 - **Event subscription:** send `{ "type": "subscribe", "events": ["message:sent", "agent:registered"] }` to filter events
 - Ping/pong heartbeat every 30s for connection health detection

@@ -278,34 +278,6 @@ describe('WebSocket E2E', () => {
     expect(data.type).toBe('state');
   });
 
-  it('full state includes messageCount and reactions', async () => {
-    const agent =
-      ctx.agents.getByName('e2e-agent') ?? ctx.agents.register({ name: 'e2e-ws-agent' });
-    const msg = ctx.messages.send(agent.id, { to: agent.id, content: 'ws-count-test' });
-    ctx.reactions.react(msg.id, agent.id, 'check');
-
-    const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      const client = new WebSocket(`ws://localhost:${port}`);
-      client.on('message', (raw: Buffer) => {
-        const parsed = JSON.parse(raw.toString());
-        if (parsed.type === 'state') {
-          client.close();
-          resolve(parsed);
-        }
-      });
-      client.on('error', reject);
-      setTimeout(() => {
-        client.close();
-        reject(new Error('Timeout'));
-      }, 5000);
-    });
-
-    expect(data.messageCount as number).toBeGreaterThan(0);
-    expect(data.reactions).not.toBeNull();
-    // reactions is an object keyed by message ID
-    expect(Object.keys(data.reactions as Record<string, unknown>).length).toBeGreaterThanOrEqual(0);
-  });
-
   it('picks up state changes via DB poll', async () => {
     const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
       const client = new WebSocket(`ws://localhost:${port}`);
@@ -341,42 +313,5 @@ describe('WebSocket E2E', () => {
     const entry = entries.find((e) => e.namespace === 'ws-ns' && e.key === 'ws-key');
     expect(entry).toBeDefined();
     expect(entry!.value).toBe('ws-val');
-  });
-
-  it('picks up reactions via DB poll', async () => {
-    const agent =
-      ctx.agents.getByName('e2e-agent') ?? ctx.agents.register({ name: 'e2e-react-agent' });
-    // Use a channel message so it appears in public state (DMs are filtered out)
-    let ch = ctx.channels.getByName('react-test-ch');
-    if (!ch) ch = ctx.channels.create('react-test-ch', agent.id);
-    const msg = ctx.messages.send(agent.id, { channel: ch.id, content: 'react-ws-test' });
-
-    const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      const client = new WebSocket(`ws://localhost:${port}`);
-      let gotInitial = false;
-
-      client.on('message', (raw: Buffer) => {
-        const parsed = JSON.parse(raw.toString());
-        if (parsed.type === 'state' && !gotInitial) {
-          gotInitial = true;
-          ctx.reactions.react(msg.id, agent.id, 'fire');
-        } else if (parsed.type === 'state' && gotInitial) {
-          const reactions = parsed.reactions || {};
-          if (reactions[msg.id]) {
-            client.close();
-            resolve(parsed);
-          }
-        }
-      });
-      client.on('error', reject);
-      setTimeout(() => {
-        client.close();
-        reject(new Error('Timeout'));
-      }, 10000);
-    });
-
-    const reactions = (data.reactions || {}) as Record<string, { reaction: string }[]>;
-    expect(reactions[msg.id]).toBeDefined();
-    expect(reactions[msg.id].some((r) => r.reaction === 'fire')).toBe(true);
   });
 });

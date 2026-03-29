@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-259%20passing-brightgreen)]()
-[![MCP Tools](https://img.shields.io/badge/MCP%20tools-12-purple)]()
+[![Tests](https://img.shields.io/badge/tests-221%20passing-brightgreen)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-9-purple)]()
 [![REST Endpoints](https://img.shields.io/badge/REST-29%20endpoints-orange)]()
 
 **Agent-agnostic intercommunication system.** Lets AI coding agents — Claude Code, Codex CLI, Gemini CLI, Aider, or any custom tool — talk to each other, share state, and coordinate work in real time.
@@ -107,19 +107,16 @@ npm run setup
 
 Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and configures permissions.
 
-## MCP tools (12)
+## MCP tools (9)
 
 | Tool            | Description                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------------- |
 | `comm_register` | Register with name, capabilities, metadata, and skills                                                     |
 | `comm_agents`   | Agent management — actions: `list`, `discover`, `whoami`, `heartbeat`, `status`, `unregister`              |
 | `comm_send`     | Send messages — direct (`to`), channel, broadcast, reply (`reply_to`), forward (`forward`)                 |
-| `comm_inbox`    | Read inbox (direct + channel messages, unread filter)                                                      |
-| `comm_message`  | Message operations — actions: `thread`, `read`, `ack`, `edit`, `delete`                                    |
+| `comm_inbox`    | Read inbox (direct + channel messages, unread filter, thread view via `thread_id`)                         |
 | `comm_channel`  | Channel management — actions: `create`, `list`, `join`, `leave`, `archive`, `update`, `members`, `history` |
 | `comm_state`    | Shared key-value state — actions: `set`, `get`, `list`, `delete`, `cas`                                    |
-| `comm_react`    | Add or remove reactions — actions: `add`, `remove`                                                         |
-| `comm_feed`     | Activity feed — actions: `log` (structured event), `query` (with filters)                                  |
 | `comm_branch`   | Conversation branching — without `message_id`: list branches; with `message_id`: fork conversation         |
 | `comm_handoff`  | Transfer conversation ownership to another agent with full context                                         |
 | `comm_search`   | Full-text search across all messages                                                                       |

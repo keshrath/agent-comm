@@ -271,11 +271,6 @@
                 : '') +
               (m.thread_id ? '<span class="message-tag">reply</span>' : '') +
               (m.ack_required ? '<span class="message-tag ack-tag">ack</span>' : '') +
-              ((AC.state.reactions[m.id] || []).length > 0
-                ? '<span class="message-tag reaction-tag">' +
-                  (AC.state.reactions[m.id] || []).length +
-                  ' reactions</span>'
-                : '') +
               (function () {
                 var branchesFromMsg = (AC.state.branches || []).filter(function (b) {
                   return b.parent_message_id === m.id;
@@ -476,28 +471,6 @@
         '</div>';
     } else {
       html += '<div class="detail-body prose">' + AC.renderMd(msg.content) + '</div>';
-    }
-
-    var msgReactions = AC.state.reactions[msg.id] || [];
-    if (msgReactions.length > 0) {
-      var grouped = {};
-      msgReactions.forEach(function (r) {
-        if (!grouped[r.reaction]) grouped[r.reaction] = [];
-        grouped[r.reaction].push(r.agent_id);
-      });
-      html += '<div class="detail-reactions">';
-      Object.keys(grouped).forEach(function (reaction) {
-        var agents = grouped[reaction].map(AC.resolveAgentName).join(', ');
-        html +=
-          '<span class="reaction-badge" title="' +
-          AC.escAttr(agents) +
-          '">' +
-          AC.esc(reaction) +
-          ' <span class="reaction-count">' +
-          grouped[reaction].length +
-          '</span></span>';
-      });
-      html += '</div>';
     }
 
     var msgBranches = (AC.state.branches || []).filter(function (b) {

@@ -1704,32 +1704,6 @@ body {
   margin-top: 2px;
 }
 
-/* Reactions */
-.detail-reactions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0;
-}
-.reaction-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  font-size: 13px;
-  cursor: default;
-}
-.reaction-count {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.reaction-tag {
-  background: var(--surface-1);
-}
-
 /* --------------------------------------------------------------------------
    Cleanup modal
    -------------------------------------------------------------------------- */

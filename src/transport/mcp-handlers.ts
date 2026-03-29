@@ -15,7 +15,6 @@ import { NotFoundError, ValidationError } from '../types.js';
 import {
   requireString,
   optString,
-  requireNumber,
   optNumber,
   optImportance,
   optStatus,
@@ -169,6 +168,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
 
       case 'unregister': {
         const self = agent.require();
+        ctx.feed.logInternal(self.id, 'unregister', self.name, self.name + ' went offline');
         ctx.agents.unregister(self.id);
         agent.setCurrent(null);
         agent.stopHeartbeat();
@@ -242,6 +242,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     if (broadcast) {
       const msgs = ctx.messages.broadcast(self.id, content, optImportance(args, 'importance'));
       ctx.agents.touchActivity(self.id);
+      ctx.feed.logInternal(self.id, 'message', 'broadcast', content.substring(0, 100));
       return { sent: msgs.length, messages: msgs };
     }
 
@@ -256,6 +257,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
         importance: optImportance(args, 'importance'),
       });
       ctx.agents.touchActivity(self.id);
+      ctx.feed.logInternal(self.id, 'message', channel, content.substring(0, 100));
       return chanMsg;
     }
 
@@ -280,10 +282,14 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
   },
 
   // =========================================================================
-  // 4. comm_inbox — keep as-is
+  // 4. comm_inbox — with optional thread_id
   // =========================================================================
   comm_inbox(ctx, args, agent) {
     const self = agent.require();
+    const threadId = optNumber(args, 'thread_id');
+    if (threadId !== undefined) {
+      return ctx.messages.thread(threadId);
+    }
     return ctx.messages.inbox(self.id, {
       unreadOnly: optBoolean(args, 'unread_only') ?? true,
       limit: optNumber(args, 'limit'),
@@ -291,58 +297,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
   },
 
   // =========================================================================
-  // 5. comm_message — merged thread, mark_read, ack, edit, delete
-  // =========================================================================
-  comm_message(ctx, args, agent) {
-    const action = requireString(args, 'action');
-
-    switch (action) {
-      case 'thread': {
-        agent.require();
-        return ctx.messages.thread(requireNumber(args, 'message_id'));
-      }
-
-      case 'read': {
-        const self = agent.require();
-        const messageId = optNumber(args, 'message_id');
-        if (messageId !== undefined) {
-          ctx.messages.markRead(messageId, self.id);
-          return { marked: 1 };
-        }
-        const count = ctx.messages.markAllRead(self.id);
-        return { marked: count };
-      }
-
-      case 'ack': {
-        const self = agent.require();
-        ctx.messages.acknowledge(requireNumber(args, 'message_id'), self.id);
-        return { success: true };
-      }
-
-      case 'edit': {
-        const self = agent.require();
-        return ctx.messages.edit(
-          requireNumber(args, 'message_id'),
-          self.id,
-          requireString(args, 'content'),
-        );
-      }
-
-      case 'delete': {
-        const self = agent.require();
-        ctx.messages.delete(requireNumber(args, 'message_id'), self.id);
-        return { success: true };
-      }
-
-      default:
-        throw new ValidationError(
-          `Unknown action "${action}". Valid: thread, read, ack, edit, delete`,
-        );
-    }
-  },
-
-  // =========================================================================
-  // 6. comm_channel — merged all channel tools (except send, which is in comm_send)
+  // 5. comm_channel — merged all channel tools (except send, which is in comm_send)
   // =========================================================================
   comm_channel(ctx, args, agent) {
     const action = requireString(args, 'action');
@@ -364,16 +319,20 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
 
       case 'join': {
         const self = agent.require();
-        const channelId = agent.resolveChannel(requireString(args, 'channel'));
+        const ch = requireString(args, 'channel');
+        const channelId = agent.resolveChannel(ch);
         ctx.channels.join(channelId, self.id);
-        return { success: true, channel: requireString(args, 'channel') };
+        ctx.feed.logInternal(self.id, 'channel_join', ch, self.name + ' joined #' + ch);
+        return { success: true, channel: ch };
       }
 
       case 'leave': {
         const self = agent.require();
-        const channelId = agent.resolveChannel(requireString(args, 'channel'));
+        const ch = requireString(args, 'channel');
+        const channelId = agent.resolveChannel(ch);
         ctx.channels.leave(channelId, self.id);
-        return { success: true, channel: requireString(args, 'channel') };
+        ctx.feed.logInternal(self.id, 'channel_leave', ch, self.name + ' left #' + ch);
+        return { success: true, channel: ch };
       }
 
       case 'archive': {
@@ -470,74 +429,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
   },
 
   // =========================================================================
-  // 8. comm_react — merged react + unreact
-  // =========================================================================
-  comm_react(ctx, args, agent) {
-    const self = agent.require();
-    const action = optString(args, 'action') ?? 'add';
-
-    if (action === 'add') {
-      ctx.reactions.react(
-        requireNumber(args, 'message_id'),
-        self.id,
-        requireString(args, 'reaction'),
-      );
-      return { success: true };
-    }
-
-    if (action === 'remove') {
-      ctx.reactions.unreact(
-        requireNumber(args, 'message_id'),
-        self.id,
-        requireString(args, 'reaction'),
-      );
-      return { success: true };
-    }
-
-    throw new ValidationError(`Unknown action "${action}". Valid: add, remove`);
-  },
-
-  // =========================================================================
-  // 9. comm_feed — merged log_activity + feed query
-  // =========================================================================
-  comm_feed(ctx, args, agent) {
-    const action = requireString(args, 'action');
-
-    switch (action) {
-      case 'log': {
-        const self = agent.require();
-        ctx.agents.touchActivity(self.id);
-        return ctx.feed.log(
-          self.id,
-          requireString(args, 'type'),
-          optString(args, 'target'),
-          optString(args, 'preview'),
-        );
-      }
-
-      case 'query': {
-        agent.require();
-        const feedAgent = optString(args, 'agent');
-        let feedAgentId: string | undefined;
-        if (feedAgent) {
-          const resolved = ctx.agents.getByName(feedAgent) ?? ctx.agents.getById(feedAgent);
-          feedAgentId = resolved?.id;
-        }
-        return ctx.feed.query({
-          agent: feedAgentId,
-          type: optString(args, 'type'),
-          limit: optNumber(args, 'limit'),
-          since: optString(args, 'since'),
-        });
-      }
-
-      default:
-        throw new ValidationError(`Unknown action "${action}". Valid: log, query`);
-    }
-  },
-
-  // =========================================================================
-  // 10. comm_branch — keep as-is (already consolidated)
+  // 8. comm_branch — keep as-is (already consolidated)
   // =========================================================================
   comm_branch(ctx, args, agent) {
     const messageId = optNumber(args, 'message_id');

@@ -13,7 +13,6 @@ import { MessageService } from './domain/messages.js';
 import { StateService } from './domain/state.js';
 import { CleanupService } from './domain/cleanup.js';
 import { RateLimiter } from './domain/rate-limit.js';
-import { ReactionService } from './domain/reactions.js';
 import { FeedService } from './domain/feed.js';
 import { BranchService } from './domain/branches.js';
 
@@ -26,7 +25,6 @@ export interface AppContext {
   readonly state: StateService;
   readonly cleanup: CleanupService;
   readonly rateLimiter: RateLimiter;
-  readonly reactions: ReactionService;
   readonly feed: FeedService;
   readonly branches: BranchService;
   close(): void;
@@ -48,7 +46,6 @@ export function createContext(dbOptions?: DbOptions): AppContext {
   const state = new StateService(db, events);
   const cleanup = new CleanupService(db, retentionDays);
   const rateLimiter = new RateLimiter();
-  const reactions = new ReactionService(db, events);
   const feed = new FeedService(db, events);
   const branches = new BranchService(db, events);
 
@@ -64,7 +61,6 @@ export function createContext(dbOptions?: DbOptions): AppContext {
     state,
     cleanup,
     rateLimiter,
-    reactions,
     feed,
     branches,
     close() {

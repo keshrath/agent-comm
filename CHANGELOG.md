@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-03-29
+
+### Removed
+
+- **`comm_react`** — reactions feature completely removed (domain, transport, UI, tests)
+- **`comm_feed`** MCP tool — activity feed is now auto-emitted internally on all actions; no manual `log` tool needed
+- **`comm_message`** MCP tool — thread view merged into `comm_inbox` via `thread_id` parameter
+
+### Changed
+
+- MCP tool count: 12 → 9
+- `comm_inbox` now accepts optional `thread_id` parameter (replaces `comm_message({ action: "thread" })`)
+- Auto-emit feed events for: register, unregister, send (direct/channel/broadcast), channel join/leave, state changes
+- Dashboard: removed reaction rendering, lazy loading for messages and feed via REST pagination
+- 221 tests across 12 suites
+
+[1.2.1]: https://github.com/keshrath/agent-comm/compare/v1.2.0...v1.2.1
+
 ## [1.2.0] - 2026-03-29
 
 ### Changed

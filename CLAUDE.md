@@ -51,4 +51,4 @@ npm run dev        # watch mode (tsc + nodemon)
 
 - **REST**: `GET /health`, `GET /api/agents`, `GET /api/messages`, `GET /api/channels`, `GET /api/state`, `GET /api/feed`, `POST /api/cleanup/stale`, `POST /api/cleanup/full`
 - **WebSocket**: Full state on connect, incremental events streamed, `refresh` request supported
-- **MCP**: 12 tools (`comm_register`, `comm_agents`, `comm_send`, `comm_inbox`, `comm_message`, `comm_channel`, `comm_state`, `comm_react`, `comm_feed`, `comm_branch`, `comm_handoff`, `comm_search`)
+- **MCP**: 9 tools (`comm_register`, `comm_agents`, `comm_send`, `comm_inbox`, `comm_channel`, `comm_state`, `comm_branch`, `comm_handoff`, `comm_search`). Activity feed is auto-emitted internally on all actions (no MCP tool needed).

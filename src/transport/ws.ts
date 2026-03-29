@@ -157,7 +157,6 @@ function getFingerprint(ctx: AppContext): string {
        || ':' || COALESCE((SELECT COUNT(*) FROM channels), 0)
        || ':' || COALESCE((SELECT COUNT(*) FROM state), 0)
        || ':' || COALESCE((SELECT MAX(rowid) FROM state), 0)
-       || ':' || COALESCE((SELECT COUNT(*) FROM message_reactions), 0)
        || ':' || COALESCE((SELECT MAX(id) FROM feed_events), 0)
        || ':' || COALESCE((SELECT COUNT(*) FROM thread_branches), 0)
      AS fp`,
@@ -173,9 +172,6 @@ function sendFullState(ws: WebSocket, ctx: AppContext): void {
       .slice(0, 19);
     const allMessages = ctx.messages.list({ limit: 50, since });
     const publicMessages = allMessages.filter((m) => m.channel_id !== null || m.to_agent === null);
-    const messageIds = publicMessages.map((m) => m.id);
-    const reactions = ctx.reactions.getForMessages(messageIds);
-
     ws.send(
       JSON.stringify({
         type: 'state',
@@ -185,7 +181,6 @@ function sendFullState(ws: WebSocket, ctx: AppContext): void {
         messages: publicMessages,
         messageCount: ctx.messages.count(),
         state: ctx.state.list(),
-        reactions,
         feed: ctx.feed.recent(30),
         branches: ctx.branches.list(),
       }),

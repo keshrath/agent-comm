@@ -137,9 +137,6 @@ describe('MCP Tool Handler', () => {
   describe('authorization', () => {
     it('requires registration for all reading tools', () => {
       const h = createToolHandler(ctx);
-      expect(() => h('comm_message', { action: 'thread', message_id: 1 })).toThrow(
-        'Not registered',
-      );
       expect(() => h('comm_search', { query: 'x' })).toThrow('Not registered');
       expect(() => h('comm_channel', { action: 'list' })).toThrow('Not registered');
       expect(() => h('comm_channel', { action: 'members', channel: 'x' })).toThrow(
@@ -178,26 +175,6 @@ describe('MCP Tool Handler', () => {
       handle('comm_register', { name: 'validator' });
       ctx.agents.register({ name: 'target' });
       expect(() => handle('comm_send', { to: 'target', content: '' })).toThrow();
-    });
-  });
-
-  describe('consolidated tools', () => {
-    it('comm_channel archive works for creator', () => {
-      const h = createToolHandler(ctx);
-      h('comm_register', { name: 'archiver' });
-      h('comm_channel', { action: 'create', channel: 'to-archive' });
-      const result = h('comm_channel', { action: 'archive', channel: 'to-archive' });
-      expect(result).toEqual({ success: true, channel: 'to-archive' });
-    });
-
-    it('comm_message delete works for sender', () => {
-      const h1 = createToolHandler(ctx);
-      const h2 = createToolHandler(ctx);
-      h1('comm_register', { name: 'deleter' });
-      h2('comm_register', { name: 'del-target' });
-      const msg = h1('comm_send', { to: 'del-target', content: 'bye' }) as { id: number };
-      const result = h1('comm_message', { action: 'delete', message_id: msg.id });
-      expect(result).toEqual({ success: true });
     });
   });
 
@@ -336,44 +313,6 @@ describe('MCP Tool Handler', () => {
     });
   });
 
-  describe('comm_react', () => {
-    it('full reaction lifecycle via MCP tools', () => {
-      const h1 = createToolHandler(ctx);
-      const h2 = createToolHandler(ctx);
-      h1('comm_register', { name: 'reactor' });
-      h2('comm_register', { name: 'reactor-b' });
-
-      const msg = h1('comm_send', { to: 'reactor-b', content: 'test msg' }) as { id: number };
-
-      // Both agents react (action defaults to "add")
-      expect(h1('comm_react', { message_id: msg.id, reaction: 'done' })).toEqual({ success: true });
-      expect(h2('comm_react', { message_id: msg.id, reaction: 'done' })).toEqual({ success: true });
-      expect(h2('comm_react', { message_id: msg.id, reaction: 'nice' })).toEqual({ success: true });
-
-      // Verify reactions via domain
-      const reactions = ctx.reactions.getForMessage(msg.id);
-      expect(reactions).toHaveLength(3);
-
-      // Explicit remove action
-      expect(h1('comm_react', { action: 'remove', message_id: msg.id, reaction: 'done' })).toEqual({
-        success: true,
-      });
-      expect(ctx.reactions.getForMessage(msg.id)).toHaveLength(2);
-    });
-
-    it('requires registration', () => {
-      const h = createToolHandler(ctx);
-      expect(() => h('comm_react', { message_id: 1, reaction: '+1' })).toThrow('Not registered');
-    });
-
-    it('validates reaction text', () => {
-      handle('comm_register', { name: 'bad-reactor' });
-      ctx.agents.register({ name: 'react-target' });
-      const msg = handle('comm_send', { to: 'react-target', content: 'x' }) as { id: number };
-      expect(() => handle('comm_react', { message_id: msg.id, reaction: '' })).toThrow();
-    });
-  });
-
   describe('rate limiting on send paths', () => {
     it('blocks after burst on comm_send direct', () => {
       const h = createToolHandler(ctx);
@@ -415,7 +354,7 @@ describe('MCP Tool Handler', () => {
     });
   });
 
-  describe('comm_send reply and forward with reactions', () => {
+  describe('comm_send reply and forward', () => {
     it('reply + react flow', () => {
       const h1 = createToolHandler(ctx);
       const h2 = createToolHandler(ctx);
@@ -432,8 +371,6 @@ describe('MCP Tool Handler', () => {
       expect(reply.thread_id).toBe(original.id);
 
       // React to the reply
-      h1('comm_react', { message_id: reply.id, reaction: 'thanks' });
-      expect(ctx.reactions.getForMessage(reply.id)).toHaveLength(1);
     });
   });
 
@@ -472,13 +409,6 @@ describe('MCP Tool Handler', () => {
     });
   });
 
-  describe('comm_message invalid action', () => {
-    it('throws for unknown action', () => {
-      handle('comm_register', { name: 'test-msg-invalid' });
-      expect(() => handle('comm_message', { action: 'invalid' })).toThrow('Unknown action');
-    });
-  });
-
   describe('comm_channel invalid action', () => {
     it('throws for unknown action', () => {
       handle('comm_register', { name: 'test-ch-invalid' });
@@ -490,22 +420,6 @@ describe('MCP Tool Handler', () => {
     it('throws for unknown action', () => {
       handle('comm_register', { name: 'test-state-invalid' });
       expect(() => handle('comm_state', { action: 'invalid' })).toThrow('Unknown action');
-    });
-  });
-
-  describe('comm_feed invalid action', () => {
-    it('throws for unknown action', () => {
-      handle('comm_register', { name: 'test-feed-invalid' });
-      expect(() => handle('comm_feed', { action: 'invalid' })).toThrow('Unknown action');
-    });
-  });
-
-  describe('comm_react invalid action', () => {
-    it('throws for unknown action', () => {
-      handle('comm_register', { name: 'test-react-invalid' });
-      expect(() =>
-        handle('comm_react', { action: 'invalid', message_id: 1, reaction: 'x' }),
-      ).toThrow('Unknown action');
     });
   });
 });

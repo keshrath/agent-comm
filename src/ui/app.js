@@ -30,7 +30,7 @@
     messages: [],
     state: [],
     messageCount: 0,
-    reactions: {},
+
     feed: [],
     branches: [],
   };
@@ -117,7 +117,6 @@
     }
     fp += '|' + (data.channels || []).length;
     fp += '|' + (data.state || []).length;
-    fp += '|' + JSON.stringify(data.reactions || {});
     fp += '|' + (data.feed || []).length;
     if ((data.feed || []).length > 0) fp += ':f' + data.feed[0].id;
     fp += '|' + (data.branches || []).length;
@@ -145,7 +144,6 @@
 
     AC.state = data;
     AC.state.messageCount = data.messageCount || data.messages.length;
-    AC.state.reactions = data.reactions || {};
     AC.state.feed = data.feed || [];
     AC.state.branches = data.branches || [];
     if (data.version) {
@@ -278,24 +276,6 @@
           });
         }
         AC.renderState();
-        break;
-      }
-      case 'message:reacted': {
-        if (!d.messageId || !d.reaction) break;
-        if (!AC.state.reactions[d.messageId]) AC.state.reactions[d.messageId] = [];
-        AC.state.reactions[d.messageId].push({ agent_id: d.agentId, reaction: d.reaction });
-        AC.renderMessages();
-        break;
-      }
-      case 'message:unreacted': {
-        if (!d.messageId || !d.reaction) break;
-        var rxns = AC.state.reactions[d.messageId];
-        if (rxns) {
-          AC.state.reactions[d.messageId] = rxns.filter(function (r) {
-            return !(r.agent_id === d.agentId && r.reaction === d.reaction);
-          });
-        }
-        AC.renderMessages();
         break;
       }
     }
