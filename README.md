@@ -106,8 +106,6 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 
 ## MCP tools (36)
 
-![Agents with Skills](docs/screenshots/agents-skills.png)
-
 ### Agent management
 
 | Tool               | Description                                            |
@@ -163,8 +161,6 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 | `comm_state_cas`    | Atomic compare-and-swap (for locks, counters, flags) |
 
 ### Activity feed
-
-![Activity Feed](docs/screenshots/activity-feed.png)
 
 | Tool                | Description                                                 |
 | ------------------- | ----------------------------------------------------------- |
@@ -226,8 +222,6 @@ The REST endpoint `GET /api/agents/:id/heartbeat` returns agent liveness info (s
 
 ## Communication patterns
 
-![Messages View](docs/screenshots/messages.png)
-
 ### Direct messaging
 
 ```mermaid
@@ -257,6 +251,14 @@ sequenceDiagram
     S-->>B: swapped false
     Note over B: Lock held by agent-a, back off
 ```
+
+## Dashboard
+
+![Messages View](docs/screenshots/messages.png)
+
+The web dashboard auto-starts at **http://localhost:3421** and shows agents, messages, channels, shared state, and the activity feed in real time. See the [Dashboard Guide](docs/DASHBOARD.md) for all views and features.
+
+---
 
 ## Testing
 
