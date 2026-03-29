@@ -78,6 +78,8 @@ export class CleanupService {
       cutoff,
     ]).changes;
 
+    this.db.run(`DELETE FROM feed_events WHERE created_at < datetime('now', ?)`, [cutoff]);
+
     if (agents + messages + reads + channels + state > 0) {
       process.stderr.write(
         `[agent-comm] Cleanup: ${agents} agents, ${messages} messages, ${reads} reads, ${channels} channels, ${state} state entries purged\n`,
@@ -157,11 +159,12 @@ export class CleanupService {
     return { agents, messages, reads, channels, state, memberships };
   }
 
-  /** Purge everything: all agents, messages, channels, state. */
+  /** Purge everything: all agents, messages, channels, state, feed. */
   purgeEverything(): CleanupStats {
     this.db.run(`DELETE FROM message_reactions`);
     this.db.run(`DELETE FROM message_reads`);
     this.db.run(`DELETE FROM channel_members`);
+    this.db.run(`DELETE FROM feed_events`);
     const messages = this.db.run(`DELETE FROM messages`).changes;
     const channels = this.db.run(`DELETE FROM channels`).changes;
     const agents = this.db.run(`DELETE FROM agents`).changes;
