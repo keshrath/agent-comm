@@ -12,8 +12,6 @@
 | ------------------------------------------ | ---------------------------------------------- |
 | ![Overview](docs/screenshots/overview.png) | ![Dark Theme](docs/screenshots/dark-theme.png) |
 
-![Messages View](docs/screenshots/messages.png)
-
 ## Why
 
 When you run multiple AI agents on the same codebase — code review in one terminal, implementation in another, testing in a third — they have no idea the others exist. They duplicate work, create merge conflicts, and miss context.
@@ -108,6 +106,8 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 
 ## MCP tools (36)
 
+![Agents with Skills](docs/screenshots/agents-skills.png)
+
 ### Agent management
 
 | Tool               | Description                                            |
@@ -163,6 +163,8 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 | `comm_state_cas`    | Atomic compare-and-swap (for locks, counters, flags) |
 
 ### Activity feed
+
+![Activity Feed](docs/screenshots/activity-feed.png)
 
 | Tool                | Description                                                 |
 | ------------------- | ----------------------------------------------------------- |
@@ -223,6 +225,8 @@ comm_heartbeat({})
 The REST endpoint `GET /api/agents/:id/heartbeat` returns agent liveness info (status, heartbeat age in ms/s, status text) for external monitoring.
 
 ## Communication patterns
+
+![Messages View](docs/screenshots/messages.png)
 
 ### Direct messaging
 
