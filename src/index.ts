@@ -114,7 +114,12 @@ rl.on('line', (line: string) => {
     const request = JSON.parse(line) as JsonRpcRequest;
     const response = handleRequest(request);
     if (response) send(response);
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] JSON-RPC parse error: ' +
+        (err instanceof Error ? err.message : String(err)) +
+        '\n',
+    );
     send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
   }
 });

@@ -18,15 +18,19 @@ describe('MCP Tool Handler', () => {
   describe('registration flow', () => {
     it('registers and returns agent identity', () => {
       const result = handle('comm_register', { name: 'test-agent' }) as Record<string, unknown>;
-      expect(result.id).toBeDefined();
+      expect(result.id as string).toMatch(/^[a-f0-9-]+$/);
       expect(result.name).toBe('test-agent');
       expect(result.status).toBe('online');
     });
 
-    it('comm_whoami returns identity after register', () => {
-      handle('comm_register', { name: 'whoami-agent' });
-      const me = handle('comm_whoami', {}) as Record<string, unknown>;
+    it('comm_agents whoami returns full agent after register', () => {
+      handle('comm_register', { name: 'whoami-agent', capabilities: ['a', 'b'] });
+      const me = handle('comm_agents', { action: 'whoami' }) as Record<string, unknown>;
       expect(me.name).toBe('whoami-agent');
+      expect(me.capabilities).toEqual(['a', 'b']);
+      expect(me.status).toBe('online');
+      expect(me.id as string).toMatch(/^[a-f0-9-]+$/);
+      expect(new Date(me.registered_at as string).getTime()).toBeGreaterThan(0);
     });
 
     it('rejects tools before registration', () => {
@@ -58,7 +62,9 @@ describe('MCP Tool Handler', () => {
       h2('comm_register', { name: 'listener1' });
       h3('comm_register', { name: 'listener2' });
 
-      const result = h1('comm_broadcast', { content: 'attention!' }) as { sent: number };
+      const result = h1('comm_send', { content: 'attention!', broadcast: true }) as {
+        sent: number;
+      };
       expect(result.sent).toBe(2);
     });
   });
@@ -71,10 +77,10 @@ describe('MCP Tool Handler', () => {
       h1('comm_register', { name: 'alice' });
       h2('comm_register', { name: 'bob' });
 
-      h1('comm_channel_create', { name: 'dev', description: 'Dev chat' });
-      h2('comm_channel_join', { channel: 'dev' });
+      h1('comm_channel', { action: 'create', channel: 'dev', description: 'Dev chat' });
+      h2('comm_channel', { action: 'join', channel: 'dev' });
 
-      h1('comm_channel_send', { channel: 'dev', content: 'channel message' });
+      h1('comm_send', { channel: 'dev', content: 'channel message' });
 
       const inbox = h2('comm_inbox', {}) as unknown[];
       expect(inbox).toHaveLength(1);
@@ -82,28 +88,21 @@ describe('MCP Tool Handler', () => {
   });
 
   describe('state flow', () => {
-    it('sets and gets shared state', () => {
-      handle('comm_register', { name: 'stater' });
-
-      handle('comm_state_set', { key: 'config', value: '{"debug": true}' });
-      const result = handle('comm_state_get', { key: 'config' }) as { value: string } | null;
-      expect(result).not.toBeNull();
-      expect(result!.value).toBe('{"debug": true}');
-    });
-
     it('compare-and-swap works atomically', () => {
       handle('comm_register', { name: 'cas-agent' });
 
-      handle('comm_state_set', { key: 'counter', value: '1' });
+      handle('comm_state', { action: 'set', key: 'counter', value: '1' });
 
-      const ok = handle('comm_state_cas', {
+      const ok = handle('comm_state', {
+        action: 'cas',
         key: 'counter',
         expected: '1',
         new_value: '2',
       }) as { swapped: boolean };
       expect(ok.swapped).toBe(true);
 
-      const fail = handle('comm_state_cas', {
+      const fail = handle('comm_state', {
+        action: 'cas',
         key: 'counter',
         expected: '1',
         new_value: '3',
@@ -120,7 +119,7 @@ describe('MCP Tool Handler', () => {
       h1('comm_register', { name: 'coder', capabilities: ['typescript', 'python'] });
       h2('comm_register', { name: 'designer', capabilities: ['figma', 'css'] });
 
-      const found = h1('comm_list_agents', { capability: 'python' }) as unknown[];
+      const found = h1('comm_agents', { action: 'list', capability: 'python' }) as unknown[];
       expect(found).toHaveLength(1);
       expect((found[0] as Record<string, unknown>).name).toBe('coder');
     });
@@ -129,23 +128,26 @@ describe('MCP Tool Handler', () => {
   describe('agent lifecycle', () => {
     it('heartbeat and unregister', () => {
       handle('comm_register', { name: 'lifecycle' });
-      expect(handle('comm_heartbeat', {})).toEqual({ success: true });
-      expect(handle('comm_unregister', {})).toEqual({ success: true });
-      expect(() => handle('comm_whoami', {})).toThrow('Not registered');
+      expect(handle('comm_agents', { action: 'heartbeat' })).toEqual({ success: true });
+      expect(handle('comm_agents', { action: 'unregister' })).toEqual({ success: true });
+      expect(() => handle('comm_agents', { action: 'whoami' })).toThrow('Not registered');
     });
   });
 
   describe('authorization', () => {
     it('requires registration for all reading tools', () => {
       const h = createToolHandler(ctx);
-      // comm_list_agents is allowed without registration
-      expect(() => h('comm_thread', { message_id: 1 })).toThrow('Not registered');
+      expect(() => h('comm_message', { action: 'thread', message_id: 1 })).toThrow(
+        'Not registered',
+      );
       expect(() => h('comm_search', { query: 'x' })).toThrow('Not registered');
-      expect(() => h('comm_channel_list', {})).toThrow('Not registered');
-      expect(() => h('comm_channel_members', { channel: 'x' })).toThrow('Not registered');
-      expect(() => h('comm_state_get', { key: 'x' })).toThrow('Not registered');
-      expect(() => h('comm_state_list', {})).toThrow('Not registered');
-      expect(() => h('comm_state_delete', { key: 'x' })).toThrow('Not registered');
+      expect(() => h('comm_channel', { action: 'list' })).toThrow('Not registered');
+      expect(() => h('comm_channel', { action: 'members', channel: 'x' })).toThrow(
+        'Not registered',
+      );
+      expect(() => h('comm_state', { action: 'get', key: 'x' })).toThrow('Not registered');
+      expect(() => h('comm_state', { action: 'list' })).toThrow('Not registered');
+      expect(() => h('comm_state', { action: 'delete', key: 'x' })).toThrow('Not registered');
     });
   });
 
@@ -157,24 +159,11 @@ describe('MCP Tool Handler', () => {
       h1('comm_register', { name: 'ch-creator' });
       h2('comm_register', { name: 'ch-outsider' });
 
-      h1('comm_channel_create', { name: 'private-ch' });
+      h1('comm_channel', { action: 'create', channel: 'private-ch' });
 
-      expect(() => h2('comm_channel_send', { channel: 'private-ch', content: 'intruder' })).toThrow(
+      expect(() => h2('comm_send', { channel: 'private-ch', content: 'intruder' })).toThrow(
         'must join',
       );
-    });
-  });
-
-  describe('comm_whoami returns full agent', () => {
-    it('returns complete agent object with capabilities', () => {
-      const h = createToolHandler(ctx);
-      h('comm_register', { name: 'full-agent', capabilities: ['a', 'b'] });
-      const me = h('comm_whoami', {}) as Record<string, unknown>;
-      expect(me.id).toBeDefined();
-      expect(me.name).toBe('full-agent');
-      expect(me.capabilities).toEqual(['a', 'b']);
-      expect(me.status).toBe('online');
-      expect(me.registered_at).toBeDefined();
     });
   });
 
@@ -192,23 +181,74 @@ describe('MCP Tool Handler', () => {
     });
   });
 
-  describe('new tools', () => {
-    it('comm_channel_archive works for creator', () => {
+  describe('consolidated tools', () => {
+    it('comm_channel archive works for creator', () => {
       const h = createToolHandler(ctx);
       h('comm_register', { name: 'archiver' });
-      h('comm_channel_create', { name: 'to-archive' });
-      const result = h('comm_channel_archive', { channel: 'to-archive' });
+      h('comm_channel', { action: 'create', channel: 'to-archive' });
+      const result = h('comm_channel', { action: 'archive', channel: 'to-archive' });
       expect(result).toEqual({ success: true, channel: 'to-archive' });
     });
 
-    it('comm_delete_message works for sender', () => {
+    it('comm_message delete works for sender', () => {
       const h1 = createToolHandler(ctx);
       const h2 = createToolHandler(ctx);
       h1('comm_register', { name: 'deleter' });
       h2('comm_register', { name: 'del-target' });
       const msg = h1('comm_send', { to: 'del-target', content: 'bye' }) as { id: number };
-      const result = h1('comm_delete_message', { message_id: msg.id });
+      const result = h1('comm_message', { action: 'delete', message_id: msg.id });
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe('comm_handoff', () => {
+    it('sends a structured handoff message to the target agent', () => {
+      const h1 = createToolHandler(ctx);
+      const h2 = createToolHandler(ctx);
+      h1('comm_register', { name: 'hand-off-sender' });
+      h2('comm_register', { name: 'hand-off-receiver' });
+
+      const result = h1('comm_handoff', {
+        to: 'hand-off-receiver',
+        context: 'Please continue the auth implementation',
+      }) as {
+        handoff_message: { id: number; content: string };
+        from: string;
+        to: string;
+        thread_included: boolean;
+      };
+
+      expect(result.from).toBe('hand-off-sender');
+      expect(result.to).toBe('hand-off-receiver');
+      expect(result.thread_included).toBe(false);
+      expect(result.handoff_message.content).toContain('HANDOFF');
+      expect(result.handoff_message.content).toContain('auth implementation');
+    });
+
+    it('includes thread history when thread_id is provided', () => {
+      const h1 = createToolHandler(ctx);
+      const h2 = createToolHandler(ctx);
+      h1('comm_register', { name: 'ho-sender' });
+      h2('comm_register', { name: 'ho-receiver' });
+
+      const original = h1('comm_send', { to: 'ho-receiver', content: 'Starting work on auth' }) as {
+        id: number;
+      };
+      h2('comm_send', { reply_to: original.id, content: 'Got it, will help' });
+
+      const result = h1('comm_handoff', {
+        to: 'ho-receiver',
+        thread_id: original.id,
+        context: 'Take over',
+      }) as { handoff_message: { content: string }; thread_included: boolean };
+
+      expect(result.thread_included).toBe(true);
+      expect(result.handoff_message.content).toContain('Thread history');
+    });
+
+    it('requires registration', () => {
+      const h = createToolHandler(ctx);
+      expect(() => h('comm_handoff', { to: 'someone' })).toThrow('Not registered');
     });
   });
 
@@ -224,46 +264,52 @@ describe('MCP Tool Handler', () => {
 
     it('throws for non-existent channel', () => {
       handle('comm_register', { name: 'lost' });
-      expect(() => handle('comm_channel_send', { channel: 'nowhere', content: 'hi' })).toThrow(
+      expect(() => handle('comm_send', { channel: 'nowhere', content: 'hi' })).toThrow(
         'Channel not found',
       );
     });
   });
 
   // -------------------------------------------------------------------------
-  // v0.3.0 integration tests
+  // comm_agents status action
   // -------------------------------------------------------------------------
 
-  describe('comm_set_status', () => {
+  describe('comm_agents status', () => {
     it('sets and clears agent status text', () => {
       handle('comm_register', { name: 'status-user' });
-      const result = handle('comm_set_status', { text: 'reviewing PR #42' }) as {
+      const result = handle('comm_agents', {
+        action: 'status',
+        status_text: 'reviewing PR #42',
+      }) as {
         success: boolean;
         status_text: string | null;
       };
       expect(result.success).toBe(true);
       expect(result.status_text).toBe('reviewing PR #42');
 
-      const me = handle('comm_whoami', {}) as Record<string, unknown>;
+      const me = handle('comm_agents', { action: 'whoami' }) as Record<string, unknown>;
       expect(me.status_text).toBe('reviewing PR #42');
 
-      handle('comm_set_status', {});
-      const me2 = handle('comm_whoami', {}) as Record<string, unknown>;
+      handle('comm_agents', { action: 'status' });
+      const me2 = handle('comm_agents', { action: 'whoami' }) as Record<string, unknown>;
       expect(me2.status_text).toBeNull();
     });
 
     it('requires registration', () => {
       const h = createToolHandler(ctx);
-      expect(() => h('comm_set_status', { text: 'hello' })).toThrow('Not registered');
+      expect(() => h('comm_agents', { action: 'status', status_text: 'hello' })).toThrow(
+        'Not registered',
+      );
     });
   });
 
-  describe('comm_channel_update', () => {
+  describe('comm_channel update', () => {
     it('updates channel description via MCP tool', () => {
       const h = createToolHandler(ctx);
       h('comm_register', { name: 'ch-updater' });
-      h('comm_channel_create', { name: 'updatable', description: 'original' });
-      const result = h('comm_channel_update', {
+      h('comm_channel', { action: 'create', channel: 'updatable', description: 'original' });
+      const result = h('comm_channel', {
+        action: 'update',
         channel: 'updatable',
         description: 'new desc',
       }) as Record<string, unknown>;
@@ -273,21 +319,24 @@ describe('MCP Tool Handler', () => {
     it('clears description when omitted', () => {
       const h = createToolHandler(ctx);
       h('comm_register', { name: 'ch-clearer' });
-      h('comm_channel_create', { name: 'clearable', description: 'has desc' });
-      const result = h('comm_channel_update', { channel: 'clearable' }) as Record<string, unknown>;
+      h('comm_channel', { action: 'create', channel: 'clearable', description: 'has desc' });
+      const result = h('comm_channel', {
+        action: 'update',
+        channel: 'clearable',
+      }) as Record<string, unknown>;
       expect(result.description).toBeNull();
     });
 
     it('throws for nonexistent channel', () => {
       const h = createToolHandler(ctx);
       h('comm_register', { name: 'ch-nope' });
-      expect(() => h('comm_channel_update', { channel: 'ghost', description: 'x' })).toThrow(
-        'Channel not found',
-      );
+      expect(() =>
+        h('comm_channel', { action: 'update', channel: 'ghost', description: 'x' }),
+      ).toThrow('Channel not found');
     });
   });
 
-  describe('comm_react / comm_unreact', () => {
+  describe('comm_react', () => {
     it('full reaction lifecycle via MCP tools', () => {
       const h1 = createToolHandler(ctx);
       const h2 = createToolHandler(ctx);
@@ -296,7 +345,7 @@ describe('MCP Tool Handler', () => {
 
       const msg = h1('comm_send', { to: 'reactor-b', content: 'test msg' }) as { id: number };
 
-      // Both agents react
+      // Both agents react (action defaults to "add")
       expect(h1('comm_react', { message_id: msg.id, reaction: 'done' })).toEqual({ success: true });
       expect(h2('comm_react', { message_id: msg.id, reaction: 'done' })).toEqual({ success: true });
       expect(h2('comm_react', { message_id: msg.id, reaction: 'nice' })).toEqual({ success: true });
@@ -305,7 +354,8 @@ describe('MCP Tool Handler', () => {
       const reactions = ctx.reactions.getForMessage(msg.id);
       expect(reactions).toHaveLength(3);
 
-      expect(h1('comm_unreact', { message_id: msg.id, reaction: 'done' })).toEqual({
+      // Explicit remove action
+      expect(h1('comm_react', { action: 'remove', message_id: msg.id, reaction: 'done' })).toEqual({
         success: true,
       });
       expect(ctx.reactions.getForMessage(msg.id)).toHaveLength(2);
@@ -314,7 +364,6 @@ describe('MCP Tool Handler', () => {
     it('requires registration', () => {
       const h = createToolHandler(ctx);
       expect(() => h('comm_react', { message_id: 1, reaction: '+1' })).toThrow('Not registered');
-      expect(() => h('comm_unreact', { message_id: 1, reaction: '+1' })).toThrow('Not registered');
     });
 
     it('validates reaction text', () => {
@@ -326,7 +375,7 @@ describe('MCP Tool Handler', () => {
   });
 
   describe('rate limiting on send paths', () => {
-    it('blocks after burst on comm_send', () => {
+    it('blocks after burst on comm_send direct', () => {
       const h = createToolHandler(ctx);
       h('comm_register', { name: 'spammer' });
       ctx.agents.register({ name: 'spam-target' });
@@ -340,33 +389,33 @@ describe('MCP Tool Handler', () => {
       );
     });
 
-    it('blocks on comm_channel_send', () => {
+    it('blocks on comm_send channel', () => {
       const h = createToolHandler(ctx);
       h('comm_register', { name: 'ch-spammer' });
-      h('comm_channel_create', { name: 'spam-ch' });
+      h('comm_channel', { action: 'create', channel: 'spam-ch' });
 
       for (let i = 0; i < 10; i++) {
-        h('comm_channel_send', { channel: 'spam-ch', content: `msg ${i}` });
+        h('comm_send', { channel: 'spam-ch', content: `msg ${i}` });
       }
-      expect(() => h('comm_channel_send', { channel: 'spam-ch', content: 'overflow' })).toThrow(
+      expect(() => h('comm_send', { channel: 'spam-ch', content: 'overflow' })).toThrow(
         'Rate limit',
       );
     });
 
-    it('blocks on comm_broadcast', () => {
+    it('blocks on comm_send broadcast', () => {
       const h1 = createToolHandler(ctx);
       const h2 = createToolHandler(ctx);
       h1('comm_register', { name: 'bc-spammer' });
       h2('comm_register', { name: 'bc-listener' });
 
       for (let i = 0; i < 10; i++) {
-        h1('comm_broadcast', { content: `msg ${i}` });
+        h1('comm_send', { content: `msg ${i}`, broadcast: true });
       }
-      expect(() => h1('comm_broadcast', { content: 'overflow' })).toThrow('Rate limit');
+      expect(() => h1('comm_send', { content: 'overflow', broadcast: true })).toThrow('Rate limit');
     });
   });
 
-  describe('comm_reply and comm_forward with reactions', () => {
+  describe('comm_send reply and forward with reactions', () => {
     it('reply + react flow', () => {
       const h1 = createToolHandler(ctx);
       const h2 = createToolHandler(ctx);
@@ -376,7 +425,7 @@ describe('MCP Tool Handler', () => {
       const original = h1('comm_send', { to: 'reply-target', content: 'question?' }) as {
         id: number;
       };
-      const reply = h2('comm_reply', { message_id: original.id, content: 'answer!' }) as {
+      const reply = h2('comm_send', { reply_to: original.id, content: 'answer!' }) as {
         id: number;
         thread_id: number;
       };
@@ -385,6 +434,78 @@ describe('MCP Tool Handler', () => {
       // React to the reply
       h1('comm_react', { message_id: reply.id, reaction: 'thanks' });
       expect(ctx.reactions.getForMessage(reply.id)).toHaveLength(1);
+    });
+  });
+
+  describe('comm_send forward', () => {
+    it('forwards a message with comment', () => {
+      const h1 = createToolHandler(ctx);
+      const h2 = createToolHandler(ctx);
+      h1('comm_register', { name: 'fwd-sender' });
+      h2('comm_register', { name: 'fwd-receiver' });
+
+      const original = h1('comm_send', { to: 'fwd-receiver', content: 'important info' }) as {
+        id: number;
+      };
+
+      const h3 = createToolHandler(ctx);
+      h3('comm_register', { name: 'fwd-target' });
+
+      h2('comm_send', {
+        forward: original.id,
+        to: 'fwd-target',
+        content: 'FYI see this',
+        comment: 'Check this out',
+      });
+
+      const inbox = h3('comm_inbox', {}) as { content: string }[];
+      expect(inbox).toHaveLength(1);
+      expect(inbox[0].content).toContain('Forwarded from fwd-sender');
+      expect(inbox[0].content).toContain('important info');
+    });
+  });
+
+  describe('comm_agents invalid action', () => {
+    it('throws for unknown action', () => {
+      handle('comm_register', { name: 'test-invalid' });
+      expect(() => handle('comm_agents', { action: 'invalid' })).toThrow('Unknown action');
+    });
+  });
+
+  describe('comm_message invalid action', () => {
+    it('throws for unknown action', () => {
+      handle('comm_register', { name: 'test-msg-invalid' });
+      expect(() => handle('comm_message', { action: 'invalid' })).toThrow('Unknown action');
+    });
+  });
+
+  describe('comm_channel invalid action', () => {
+    it('throws for unknown action', () => {
+      handle('comm_register', { name: 'test-ch-invalid' });
+      expect(() => handle('comm_channel', { action: 'invalid' })).toThrow('Unknown action');
+    });
+  });
+
+  describe('comm_state invalid action', () => {
+    it('throws for unknown action', () => {
+      handle('comm_register', { name: 'test-state-invalid' });
+      expect(() => handle('comm_state', { action: 'invalid' })).toThrow('Unknown action');
+    });
+  });
+
+  describe('comm_feed invalid action', () => {
+    it('throws for unknown action', () => {
+      handle('comm_register', { name: 'test-feed-invalid' });
+      expect(() => handle('comm_feed', { action: 'invalid' })).toThrow('Unknown action');
+    });
+  });
+
+  describe('comm_react invalid action', () => {
+    it('throws for unknown action', () => {
+      handle('comm_register', { name: 'test-react-invalid' });
+      expect(() =>
+        handle('comm_react', { action: 'invalid', message_id: 1, reaction: 'x' }),
+      ).toThrow('Unknown action');
     });
   });
 });

@@ -192,8 +192,12 @@ export class CleanupService {
     this.timer = setInterval(() => {
       try {
         this.run();
-      } catch {
-        /* db may be closed */
+      } catch (err) {
+        process.stderr.write(
+          '[agent-comm] Cleanup timer error: ' +
+            (err instanceof Error ? err.message : String(err)) +
+            '\n',
+        );
       }
     }, CLEANUP_INTERVAL_MS);
     this.timer.unref();

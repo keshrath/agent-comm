@@ -27,6 +27,7 @@ interface AgentRow {
   last_heartbeat: string;
   registered_at: string;
   skills: string;
+  last_activity: string | null;
 }
 
 function rowToAgent(row: AgentRow): Agent {
@@ -40,6 +41,7 @@ function rowToAgent(row: AgentRow): Agent {
     last_heartbeat: row.last_heartbeat,
     registered_at: row.registered_at,
     skills: JSON.parse(row.skills || '[]') as Skill[],
+    last_activity: row.last_activity,
   };
 }
 
@@ -80,6 +82,7 @@ export class AgentService {
     if (existing) {
       this.db.run(
         `UPDATE agents SET status = 'online', last_heartbeat = datetime('now'),
+         last_activity = datetime('now'),
          capabilities = ?, metadata = ?, skills = ? WHERE id = ?`,
         [
           JSON.stringify(input.capabilities ?? []),
@@ -118,6 +121,11 @@ export class AgentService {
   getByName(name: string): Agent | null {
     const row = this.db.queryOne<AgentRow>(`SELECT * FROM agents WHERE name = ?`, [name]);
     return row ? rowToAgent(row) : null;
+  }
+
+  /** Resolve an agent by name or ID. Returns null if not found. */
+  resolveByNameOrId(nameOrId: string): Agent | null {
+    return this.getByName(nameOrId) ?? this.getById(nameOrId);
   }
 
   list(
@@ -245,6 +253,23 @@ export class AgentService {
     });
   }
 
+  /** Update last_activity timestamp for an agent (called on meaningful actions). */
+  touchActivity(agentId: string): void {
+    this.db.run(`UPDATE agents SET last_activity = datetime('now') WHERE id = ?`, [agentId]);
+  }
+
+  /** Return agents whose heartbeat is recent but last_activity exceeds threshold. */
+  stuckAgents(thresholdMinutes: number = 10): Agent[] {
+    const rows = this.db.queryAll<AgentRow>(
+      `SELECT * FROM agents
+       WHERE status IN ('online', 'idle')
+         AND last_heartbeat >= datetime('now', ? || ' seconds')
+         AND (last_activity IS NULL OR last_activity < datetime('now', ? || ' seconds'))`,
+      [`-${OFFLINE_THRESHOLD_SECONDS}`, `-${thresholdMinutes * 60}`],
+    );
+    return rows.map(rowToAgent);
+  }
+
   unregister(agentId: string): void {
     this.db.run(`UPDATE agents SET status = 'offline' WHERE id = ?`, [agentId]);
     this.events.emit('agent:offline', { agentId });
@@ -263,6 +288,15 @@ export class AgentService {
          AND last_heartbeat < datetime('now', ? || ' seconds')`,
       [`-${OFFLINE_THRESHOLD_SECONDS}`],
     );
+    // Stuck detection: agents with recent heartbeat but no activity for 10+ minutes
+    this.db.run(
+      `UPDATE agents SET status = 'idle'
+       WHERE status = 'online'
+         AND last_heartbeat >= datetime('now', ? || ' seconds')
+         AND last_activity IS NOT NULL
+         AND last_activity < datetime('now', '-600 seconds')`,
+      [`-${OFFLINE_THRESHOLD_SECONDS}`],
+    );
   }
 
   stopReaper(): void {
@@ -276,8 +310,10 @@ export class AgentService {
     this.reapTimer = setInterval(() => {
       try {
         this.reapStale();
-      } catch {
-        /* db may be closed during shutdown */
+      } catch (err) {
+        process.stderr.write(
+          '[agent-comm] Reaper error: ' + (err instanceof Error ? err.message : String(err)) + '\n',
+        );
       }
     }, REAP_INTERVAL_MS);
     this.reapTimer.unref();

@@ -26,7 +26,7 @@ export interface Db {
   close(): void;
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export function createDb(options: DbOptions = {}): Db {
   const dbPath = resolveDbPath(options.path);
@@ -97,6 +97,7 @@ function applySchema(db: Database.Database): void {
   if (currentVersion < 1) migrateV1(db);
   if (currentVersion < 2) migrateV2(db);
   if (currentVersion < 3) migrateV3(db);
+  if (currentVersion < 4) migrateV4(db);
 
   db.prepare(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`).run(
     String(SCHEMA_VERSION),
@@ -232,5 +233,26 @@ function migrateV3(db: Database.Database): void {
 
     -- Skills JSON column on agents
     ALTER TABLE agents ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
+  `);
+}
+
+function migrateV4(db: Database.Database): void {
+  db.exec(`
+    -- Conversation branches
+    CREATE TABLE IF NOT EXISTS thread_branches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      parent_message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      name TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_thread_branches_parent ON thread_branches(parent_message_id);
+
+    -- Branch ID on messages (nullable — null means main conversation)
+    ALTER TABLE messages ADD COLUMN branch_id INTEGER REFERENCES thread_branches(id) ON DELETE SET NULL;
+    CREATE INDEX IF NOT EXISTS idx_messages_branch ON messages(branch_id);
+
+    -- Last activity tracking for stuck detection
+    ALTER TABLE agents ADD COLUMN last_activity TEXT;
   `);
 }

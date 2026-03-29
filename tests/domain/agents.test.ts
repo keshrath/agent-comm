@@ -15,7 +15,7 @@ describe('AgentService', () => {
   describe('register', () => {
     it('creates an agent with a unique id', () => {
       const agent = ctx.agents.register({ name: 'test-agent' });
-      expect(agent.id).toBeDefined();
+      expect(agent.id).toMatch(/^[a-f0-9-]+$/);
       expect(agent.name).toBe('test-agent');
       expect(agent.status).toBe('online');
       expect(agent.capabilities).toEqual([]);
@@ -95,8 +95,7 @@ describe('AgentService', () => {
       const agent = ctx.agents.register({ name: 'heartbeater' });
       ctx.agents.heartbeat(agent.id);
       const after = ctx.agents.getById(agent.id)!.last_heartbeat;
-      expect(after).toBeDefined();
-      expect(typeof after).toBe('string');
+      expect(new Date(after!).getTime()).toBeGreaterThan(0);
     });
 
     it('throws for unknown agents', () => {
@@ -123,20 +122,62 @@ describe('AgentService', () => {
     });
   });
 
+  describe('stuckAgents', () => {
+    it('returns agents with heartbeat but no recent activity', () => {
+      const agent = ctx.agents.register({ name: 'stuck-agent' });
+      // Agent has a heartbeat (just registered), but we set last_activity to the past
+      ctx.db.run(`UPDATE agents SET last_activity = datetime('now', '-30 minutes') WHERE id = ?`, [
+        agent.id,
+      ]);
+      // Also ensure heartbeat is recent
+      ctx.agents.heartbeat(agent.id);
+
+      const stuck = ctx.agents.stuckAgents(10);
+      expect(stuck).toHaveLength(1);
+      expect(stuck[0].id).toBe(agent.id);
+      expect(stuck[0].name).toBe('stuck-agent');
+    });
+
+    it('does not return agents with recent activity', () => {
+      const agent = ctx.agents.register({ name: 'active-agent' });
+      ctx.agents.heartbeat(agent.id);
+      ctx.agents.touchActivity(agent.id);
+
+      const stuck = ctx.agents.stuckAgents(10);
+      expect(stuck).toHaveLength(0);
+    });
+
+    it('does not return offline agents', () => {
+      const agent = ctx.agents.register({ name: 'offline-agent' });
+      ctx.db.run(`UPDATE agents SET last_activity = datetime('now', '-30 minutes') WHERE id = ?`, [
+        agent.id,
+      ]);
+      ctx.agents.unregister(agent.id);
+
+      const stuck = ctx.agents.stuckAgents(10);
+      expect(stuck).toHaveLength(0);
+    });
+  });
+
   describe('events', () => {
     it('emits agent:registered on registration', () => {
-      const events: unknown[] = [];
-      ctx.events.on('agent:registered', (e) => events.push(e));
-      ctx.agents.register({ name: 'evented' });
+      const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+      ctx.events.on('agent:registered', (e) => events.push(e as (typeof events)[0]));
+      const agent = ctx.agents.register({ name: 'evented' });
       expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('agent:registered');
+      expect((events[0].data.agent as Record<string, unknown>).name).toBe('evented');
+      expect((events[0].data.agent as Record<string, unknown>).id).toBe(agent.id);
     });
 
     it('emits agent:offline on unregister', () => {
-      const events: unknown[] = [];
-      ctx.events.on('agent:offline', (e) => events.push(e));
+      const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+      ctx.events.on('agent:offline', (e) => events.push(e as (typeof events)[0]));
       const agent = ctx.agents.register({ name: 'will-leave' });
       ctx.agents.unregister(agent.id);
       expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('agent:offline');
+      expect(events[0].data.agentId).toBe(agent.id);
     });
   });
 });

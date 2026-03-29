@@ -141,19 +141,25 @@ describe('StateService', () => {
   });
 
   describe('events', () => {
-    it('emits state:changed on set', () => {
-      const events: unknown[] = [];
-      ctx.events.on('state:changed', (e) => events.push(e));
+    it('emits state:changed on set with payload', () => {
+      const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+      ctx.events.on('state:changed', (e) => events.push(e as (typeof events)[0]));
       ctx.state.set('default', 'k', 'v', agentId);
       expect(events).toHaveLength(1);
+      expect(events[0].data.namespace).toBe('default');
+      expect(events[0].data.key).toBe('k');
+      expect(events[0].data.value).toBe('v');
+      expect(events[0].data.updated_by).toBe(agentId);
     });
 
-    it('emits state:deleted on delete', () => {
-      const events: unknown[] = [];
-      ctx.events.on('state:deleted', (e) => events.push(e));
+    it('emits state:deleted on delete with payload', () => {
+      const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+      ctx.events.on('state:deleted', (e) => events.push(e as (typeof events)[0]));
       ctx.state.set('default', 'k', 'v', agentId);
       ctx.state.delete('default', 'k');
       expect(events).toHaveLength(1);
+      expect(events[0].data.namespace).toBe('default');
+      expect(events[0].data.key).toBe('k');
     });
   });
 });

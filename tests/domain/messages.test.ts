@@ -19,12 +19,13 @@ describe('MessageService', () => {
   describe('send', () => {
     it('sends a direct message', () => {
       const msg = ctx.messages.send(alice.id, { to: bob.id, content: 'hello' });
-      expect(msg.id).toBeDefined();
+      expect(msg.id).toBeGreaterThan(0);
       expect(msg.from_agent).toBe(alice.id);
       expect(msg.to_agent).toBe(bob.id);
       expect(msg.content).toBe('hello');
       expect(msg.importance).toBe('normal');
       expect(msg.ack_required).toBe(false);
+      expect(new Date(msg.created_at).getTime()).toBeGreaterThan(0);
     });
 
     it('sends with importance and ack_required', () => {
@@ -136,7 +137,7 @@ describe('MessageService', () => {
       const status = ctx.messages.readStatus(msg.id);
       expect(status).toHaveLength(1);
       expect(status[0].agent_id).toBe(bob.id);
-      expect(status[0].read_at).toBeDefined();
+      expect(new Date(status[0].read_at).getTime()).toBeGreaterThan(0);
     });
 
     it('marks all as read', () => {
@@ -159,7 +160,8 @@ describe('MessageService', () => {
       ctx.messages.acknowledge(msg.id, bob.id);
 
       const status = ctx.messages.readStatus(msg.id);
-      expect(status[0].acked_at).toBeDefined();
+      expect(status[0].agent_id).toBe(bob.id);
+      expect(new Date(status[0].acked_at).getTime()).toBeGreaterThan(0);
     });
 
     it('rejects ack on non-ack messages', () => {
@@ -197,7 +199,7 @@ describe('MessageService', () => {
       const msg = ctx.messages.send(alice.id, { to: bob.id, content: 'typo' });
       const edited = ctx.messages.edit(msg.id, alice.id, 'fixed');
       expect(edited.content).toBe('fixed');
-      expect(edited.edited_at).toBeDefined();
+      expect(new Date(edited.edited_at!).getTime()).toBeGreaterThan(0);
     });
 
     it('rejects edit by non-sender', () => {
@@ -213,11 +215,16 @@ describe('MessageService', () => {
   });
 
   describe('events', () => {
-    it('emits message:sent', () => {
-      const events: unknown[] = [];
-      ctx.events.on('message:sent', (e) => events.push(e));
+    it('emits message:sent with full payload', () => {
+      const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+      ctx.events.on('message:sent', (e) => events.push(e as (typeof events)[0]));
       ctx.messages.send(alice.id, { to: bob.id, content: 'evented' });
       expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('message:sent');
+      const message = events[0].data.message as Record<string, unknown>;
+      expect(message.from_agent).toBe(alice.id);
+      expect(message.to_agent).toBe(bob.id);
+      expect(message.content).toBe('evented');
     });
   });
 });

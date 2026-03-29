@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-29
+
+### Changed
+
+- **Major tool consolidation**: 38 tools reduced to 12 via action-based dispatch
+  - `comm_agents` — merges `comm_list_agents`, `comm_discover`, `comm_whoami`, `comm_heartbeat`, `comm_set_status`, `comm_unregister`
+  - `comm_send` — merges `comm_send`, `comm_broadcast`, `comm_channel_send`, `comm_reply`, `comm_forward`
+  - `comm_message` — merges `comm_thread`, `comm_mark_read`, `comm_ack`, `comm_edit_message`, `comm_delete_message`
+  - `comm_channel` — merges `comm_channel_create`, `comm_channel_list`, `comm_channel_join`, `comm_channel_leave`, `comm_channel_archive`, `comm_channel_members`, `comm_channel_history`, `comm_channel_update`
+  - `comm_state` — merges `comm_state_set`, `comm_state_get`, `comm_state_list`, `comm_state_delete`, `comm_state_cas`
+  - `comm_react` — merges `comm_react`, `comm_unreact` (action: "add"|"remove")
+  - `comm_feed` — merges `comm_log_activity`, `comm_feed` (action: "log"|"query")
+  - Kept as-is: `comm_register`, `comm_inbox`, `comm_branch`, `comm_handoff`, `comm_search`
+- All domain service methods unchanged — only transport layer refactored
+- All tests updated to use new tool names (259 tests passing)
+
+[1.3.0]: https://github.com/keshrath/agent-comm/compare/v1.2.0...v1.3.0
+
+## [1.2.0] - 2026-03-29
+
+### Added
+
+- **Conversation Branching** — fork a thread at any message point with `comm_branch` (pass `message_id` to create, omit to list). New `thread_branches` table, `branch_id` column on messages. Dashboard shows branch indicators on messages and branch listings in detail view.
+- **Stuck Detection** — detect agents alive (heartbeat OK) but not making progress. New `last_activity` column on agents, updated on message send, state change, and activity logging. `comm_list_agents` with `stuck_threshold_minutes` returns idle agents (replaces `comm_stuck`). Heartbeat reaper auto-marks stuck agents as idle. Dashboard shows "idle" badge with time since last activity on agent cards.
+- **Handoff Primitive** — transfer conversation ownership with full context via `comm_handoff`. Sends structured high-importance message with thread history and optional context. Dashboard renders handoff messages with distinct orange styling and swap icon.
+- Database schema V4 with `thread_branches` table, `branch_id` on messages, `last_activity` on agents
+- REST endpoints: `GET /api/branches`, `GET /api/branches/:id`, `GET /api/branches/:id/messages`, `GET /api/stuck`
+- Activity feed types: `handoff`, `branch`
+
+### Changed
+
+- MCP tool count: 36 → 38 (consolidated `comm_branches` into `comm_branch`, `comm_stuck` into `comm_list_agents`)
+- REST endpoint count: 25 → 29
+
+[1.2.0]: https://github.com/keshrath/agent-comm/compare/v1.1.1...v1.2.0
+
 ## [1.1.1] - 2026-03-29
 
 ### Added

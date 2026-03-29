@@ -15,7 +15,17 @@ import { fileURLToPath } from 'url';
 import type { AppContext } from '../context.js';
 
 const __ws_dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(join(__ws_dirname, '..', '..', 'package.json'), 'utf8'));
+let pkg: { version: string };
+try {
+  pkg = JSON.parse(readFileSync(join(__ws_dirname, '..', '..', 'package.json'), 'utf8'));
+} catch (err) {
+  process.stderr.write(
+    '[agent-comm] Failed to read package.json: ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\n',
+  );
+  pkg = { version: '0.0.0' };
+}
 
 const MAX_WS_MESSAGE_SIZE = 4096;
 const MAX_WS_CONNECTIONS = 50;
@@ -53,7 +63,12 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw.toString());
-      } catch {
+      } catch (err) {
+        process.stderr.write(
+          '[agent-comm] WS message parse error: ' +
+            (err instanceof Error ? err.message : String(err)) +
+            '\n',
+        );
         ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
         return;
       }
@@ -108,8 +123,12 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
           }
         }
       }
-    } catch {
-      /* ignore poll errors — DB may be briefly locked */
+    } catch (err) {
+      process.stderr.write(
+        '[agent-comm] WS DB poll error: ' +
+          (err instanceof Error ? err.message : String(err)) +
+          '\n',
+      );
     }
   }, DB_POLL_INTERVAL_MS);
   dbPollInterval.unref();
@@ -140,6 +159,7 @@ function getFingerprint(ctx: AppContext): string {
        || ':' || COALESCE((SELECT MAX(rowid) FROM state), 0)
        || ':' || COALESCE((SELECT COUNT(*) FROM message_reactions), 0)
        || ':' || COALESCE((SELECT MAX(id) FROM feed_events), 0)
+       || ':' || COALESCE((SELECT COUNT(*) FROM thread_branches), 0)
      AS fp`,
   );
   return row?.fp ?? '';
@@ -167,9 +187,12 @@ function sendFullState(ws: WebSocket, ctx: AppContext): void {
         state: ctx.state.list(),
         reactions,
         feed: ctx.feed.recent(30),
+        branches: ctx.branches.list(),
       }),
     );
-  } catch {
-    /* ignore send errors on closed sockets */
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] WS send error: ' + (err instanceof Error ? err.message : String(err)) + '\n',
+    );
   }
 }

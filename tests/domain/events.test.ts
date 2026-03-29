@@ -23,6 +23,8 @@ describe('EventBus', () => {
     bus.emit('agent:registered');
     bus.emit('message:sent');
     expect(received).toHaveLength(2);
+    expect(received[0].type).toBe('agent:registered');
+    expect(received[1].type).toBe('message:sent');
   });
 
   it('does not deliver events to unrelated listeners', () => {
@@ -49,14 +51,15 @@ describe('EventBus', () => {
   });
 
   it('includes timestamp in events', () => {
+    const before = Date.now();
     let event: CommEvent | null = null;
     bus.on('agent:registered', (e) => {
       event = e;
     });
     bus.emit('agent:registered');
     expect(event).not.toBeNull();
-    expect(event!.timestamp).toBeDefined();
-    expect(new Date(event!.timestamp).getTime()).toBeGreaterThan(0);
+    expect(new Date(event!.timestamp).getTime()).toBeGreaterThanOrEqual(before);
+    expect(new Date(event!.timestamp).getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it('removeAll clears all listeners', () => {

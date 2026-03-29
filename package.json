@@ -1,6 +1,6 @@
 {
   "name": "agent-comm",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Agent-agnostic intercommunication system — sessions, messaging, channels, shared state, and real-time events",
   "type": "module",
   "main": "dist/index.js",
@@ -36,10 +36,10 @@
     ]
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "12.8.0",
     "morphdom": "^2.7.8",
     "uuid": "^11.1.0",
-    "ws": "^8.20.0"
+    "ws": "8.20.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)]()
-[![MCP Tools](https://img.shields.io/badge/MCP%20tools-36-purple)]()
-[![REST Endpoints](https://img.shields.io/badge/REST-25%20endpoints-orange)]()
+[![Tests](https://img.shields.io/badge/tests-259%20passing-brightgreen)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-12-purple)]()
+[![REST Endpoints](https://img.shields.io/badge/REST-29%20endpoints-orange)]()
 
 **Agent-agnostic intercommunication system.** Lets AI coding agents — Claude Code, Codex CLI, Gemini CLI, Aider, or any custom tool — talk to each other, share state, and coordinate work in real time.
 
@@ -32,6 +32,9 @@ When you run multiple AI agents on the same codebase — code review in one term
 - They **react** to messages for lightweight signaling ("+1", "done", "blocked")
 - They share **state** (a key-value store with atomic CAS) for locks, flags, and progress
 - They log **activity events** (commits, test results, file edits) to a shared feed
+- They **branch conversations** — fork a thread at any message, creating isolated history branches
+- They detect **stuck agents** — alive (heartbeat OK) but not making progress
+- They **hand off** conversations — transfer ownership with full thread context to another agent
 - A **web dashboard** shows everything in real time, including an Activity Feed tab
 
 It works with any agent that supports [MCP](https://modelcontextprotocol.io/) (stdio transport) or can make HTTP requests (REST API).
@@ -104,68 +107,22 @@ npm run setup
 
 Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and configures permissions.
 
-## MCP tools (36)
+## MCP tools (12)
 
-### Agent management
-
-| Tool               | Description                                            |
-| ------------------ | ------------------------------------------------------ |
-| `comm_register`    | Register with name, capabilities, metadata, and skills |
-| `comm_list_agents` | List agents (filter by status/capability)              |
-| `comm_discover`    | Find agents by skill ID or tag                         |
-| `comm_whoami`      | Return this agent's identity                           |
-| `comm_heartbeat`   | Keep agent online (optionally set status text)         |
-| `comm_unregister`  | Go offline                                             |
-| `comm_set_status`  | Set status text (e.g. "working on X")                  |
-
-### Messaging
-
-| Tool                  | Description                                                  |
-| --------------------- | ------------------------------------------------------------ |
-| `comm_send`           | Direct message to agent by name (threading, importance, ack) |
-| `comm_broadcast`      | Message all online agents                                    |
-| `comm_channel_send`   | Post to a channel (requires membership)                      |
-| `comm_inbox`          | Read inbox (direct + channel messages, unread filter)        |
-| `comm_thread`         | Get full thread from any message ID                          |
-| `comm_mark_read`      | Mark message(s) as read                                      |
-| `comm_ack`            | Acknowledge a message that requires it                       |
-| `comm_reply`          | Reply to a message (auto-threads, auto-routes)               |
-| `comm_forward`        | Forward a message to another agent or channel                |
-| `comm_search`         | Full-text search across messages                             |
-| `comm_edit_message`   | Edit a message you sent                                      |
-| `comm_delete_message` | Delete a message you sent                                    |
-| `comm_react`          | Add a reaction to a message (e.g. "done", "+1")              |
-| `comm_unreact`        | Remove a reaction from a message                             |
-
-### Channels
-
-| Tool                   | Description                                 |
-| ---------------------- | ------------------------------------------- |
-| `comm_channel_create`  | Create a topic channel (auto-joins creator) |
-| `comm_channel_list`    | List active channels                        |
-| `comm_channel_join`    | Join a channel                              |
-| `comm_channel_leave`   | Leave a channel                             |
-| `comm_channel_archive` | Archive a channel (creator only)            |
-| `comm_channel_members` | List channel members                        |
-| `comm_channel_history` | Get recent messages from a channel          |
-| `comm_channel_update`  | Update channel description                  |
-
-### Shared state
-
-| Tool                | Description                                          |
-| ------------------- | ---------------------------------------------------- |
-| `comm_state_set`    | Set a namespaced key-value pair                      |
-| `comm_state_get`    | Get a value by key                                   |
-| `comm_state_list`   | List entries (filter by namespace/prefix)            |
-| `comm_state_delete` | Delete an entry                                      |
-| `comm_state_cas`    | Atomic compare-and-swap (for locks, counters, flags) |
-
-### Activity feed
-
-| Tool                | Description                                                 |
-| ------------------- | ----------------------------------------------------------- |
-| `comm_log_activity` | Log a structured event (commit, test_pass, file_edit, etc.) |
-| `comm_feed`         | Query the activity feed with optional filters               |
+| Tool            | Description                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `comm_register` | Register with name, capabilities, metadata, and skills                                                     |
+| `comm_agents`   | Agent management — actions: `list`, `discover`, `whoami`, `heartbeat`, `status`, `unregister`              |
+| `comm_send`     | Send messages — direct (`to`), channel, broadcast, reply (`reply_to`), forward (`forward`)                 |
+| `comm_inbox`    | Read inbox (direct + channel messages, unread filter)                                                      |
+| `comm_message`  | Message operations — actions: `thread`, `read`, `ack`, `edit`, `delete`                                    |
+| `comm_channel`  | Channel management — actions: `create`, `list`, `join`, `leave`, `archive`, `update`, `members`, `history` |
+| `comm_state`    | Shared key-value state — actions: `set`, `get`, `list`, `delete`, `cas`                                    |
+| `comm_react`    | Add or remove reactions — actions: `add`, `remove`                                                         |
+| `comm_feed`     | Activity feed — actions: `log` (structured event), `query` (with filters)                                  |
+| `comm_branch`   | Conversation branching — without `message_id`: list branches; with `message_id`: fork conversation         |
+| `comm_handoff`  | Transfer conversation ownership to another agent with full context                                         |
+| `comm_search`   | Full-text search across all messages                                                                       |
 
 ## REST API
 
@@ -203,17 +160,17 @@ POST   /api/cleanup/full                  Full database cleanup
 
 ## Agent visibility and status
 
-`comm_heartbeat` accepts an optional `status_text` parameter, letting agents update their visible status in the same call that keeps them online:
+`comm_agents` with `action: "heartbeat"` accepts an optional `status_text` parameter, letting agents update their visible status in the same call that keeps them online:
 
 ```jsonc
 // MCP call — heartbeat + status update in one
-comm_heartbeat({ "status_text": "implementing auth module" })
+comm_agents({ "action": "heartbeat", "status_text": "implementing auth module" })
 
 // Clear status text (pass null)
-comm_heartbeat({ "status_text": null })
+comm_agents({ "action": "heartbeat", "status_text": null })
 
 // Plain heartbeat — status text unchanged
-comm_heartbeat({})
+comm_agents({ "action": "heartbeat" })
 ```
 
 **Claude Code agents** get automatic heartbeats and status via hooks (see [Setup docs](docs/SETUP.md)). **Subagents** (spawned via Claude Code's Agent tool) also receive registration reminders via the `SubagentStart` hook — ensuring they register, join channels, and communicate just like the main session. **Other MCP clients** or scripts can call `comm_heartbeat` periodically with a status string to show live progress on the dashboard.
@@ -245,9 +202,9 @@ sequenceDiagram
     participant S as agent-comm
     participant B as Agent B
 
-    A->>S: comm_state_cas(key deploy-lock, new agent-a)
+    A->>S: comm_state(action cas, key deploy-lock, new agent-a)
     S-->>A: swapped true
-    B->>S: comm_state_cas(key deploy-lock, new agent-b)
+    B->>S: comm_state(action cas, key deploy-lock, new agent-b)
     S-->>B: swapped false
     Note over B: Lock held by agent-a, back off
 ```

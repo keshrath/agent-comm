@@ -64,8 +64,7 @@ describe('REST API E2E', () => {
   it('GET /api/agents returns empty list', async () => {
     const { status, body } = await get('/api/agents');
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body).toHaveLength(0);
+    expect(body).toEqual([]);
   });
 
   it('GET /api/agents returns agents after registration', async () => {
@@ -89,17 +88,20 @@ describe('REST API E2E', () => {
     expect(status).toBe(404);
   });
 
-  it('GET /api/channels returns empty list', async () => {
-    const { body } = await get('/api/channels');
-    expect(Array.isArray(body)).toBe(true);
+  it('GET /api/channels returns empty list initially', async () => {
+    const { status, body } = await get('/api/channels');
+    expect(status).toBe(200);
+    expect(body).toEqual([]);
   });
 
   it('GET /api/overview returns all data', async () => {
     const { body } = await get('/api/overview');
-    expect(body).toHaveProperty('agents');
-    expect(body).toHaveProperty('channels');
-    expect(body).toHaveProperty('recentMessages');
-    expect(body).toHaveProperty('stateEntries');
+    expect(Array.isArray(body.agents)).toBe(true);
+    expect(Array.isArray(body.channels)).toBe(true);
+    expect(Array.isArray(body.recent_messages)).toBe(true);
+    expect(Array.isArray(body.state_entries)).toBe(true);
+    // Should contain the previously registered e2e-agent
+    expect((body.agents as { name: string }[]).some((a) => a.name === 'e2e-agent')).toBe(true);
   });
 
   it('GET /api/search returns 400 without query', async () => {
@@ -113,8 +115,12 @@ describe('REST API E2E', () => {
     ctx.state.set('default', 'e2e-key', 'e2e-value', agent.id);
 
     const { body } = await get('/api/state');
-    expect(Array.isArray(body)).toBe(true);
-    expect((body as Record<string, unknown>[]).length).toBeGreaterThan(0);
+    const entries = body as { namespace: string; key: string; value: string }[];
+    expect(entries.length).toBeGreaterThan(0);
+    const entry = entries.find((e) => e.key === 'e2e-key');
+    expect(entry).toBeDefined();
+    expect(entry!.value).toBe('e2e-value');
+    expect(entry!.namespace).toBe('default');
   });
 
   it('GET /api/state/:namespace/:key returns specific entry', async () => {
@@ -130,13 +136,13 @@ describe('REST API E2E', () => {
   it('GET /api/export returns full database dump', async () => {
     const { status, body } = await get('/api/export');
     expect(status).toBe(200);
-    expect(body).toHaveProperty('exported_at');
-    expect(body).toHaveProperty('agents');
-    expect(body).toHaveProperty('channels');
-    expect(body).toHaveProperty('messages');
-    expect(body).toHaveProperty('state');
+    expect(new Date(body.exported_at as string).getTime()).toBeGreaterThan(0);
     expect(Array.isArray(body.agents)).toBe(true);
+    expect(Array.isArray(body.channels)).toBe(true);
     expect(Array.isArray(body.messages)).toBe(true);
+    expect(Array.isArray(body.state)).toBe(true);
+    // Should include the e2e-agent we registered
+    expect((body.agents as { name: string }[]).some((a) => a.name === 'e2e-agent')).toBe(true);
   });
 
   it('POST with invalid JSON returns 422 not 500', async () => {
@@ -209,9 +215,9 @@ describe('WebSocket E2E', () => {
     });
 
     expect(data.type).toBe('state');
-    expect(data).toHaveProperty('agents');
-    expect(data).toHaveProperty('channels');
-    expect(data).toHaveProperty('messages');
+    expect(Array.isArray(data.agents)).toBe(true);
+    expect(Array.isArray(data.channels)).toBe(true);
+    expect(Array.isArray(data.messages)).toBe(true);
   });
 
   it('picks up agent registration via DB poll', async () => {
@@ -294,10 +300,10 @@ describe('WebSocket E2E', () => {
       }, 5000);
     });
 
-    expect(data).toHaveProperty('messageCount');
-    expect(typeof data.messageCount).toBe('number');
     expect(data.messageCount as number).toBeGreaterThan(0);
-    expect(data).toHaveProperty('reactions');
+    expect(data.reactions).not.toBeNull();
+    // reactions is an object keyed by message ID
+    expect(Object.keys(data.reactions as Record<string, unknown>).length).toBeGreaterThanOrEqual(0);
   });
 
   it('picks up state changes via DB poll', async () => {

@@ -24,8 +24,14 @@ export class EventBus {
       for (const handler of specific) {
         try {
           handler(event);
-        } catch {
-          /* listeners must not crash the bus */
+        } catch (err) {
+          process.stderr.write(
+            '[agent-comm] Event listener error (' +
+              type +
+              '): ' +
+              (err instanceof Error ? err.message : String(err)) +
+              '\n',
+          );
         }
       }
     }
@@ -35,8 +41,14 @@ export class EventBus {
       for (const handler of wildcards) {
         try {
           handler(event);
-        } catch {
-          /* ignore */
+        } catch (err) {
+          process.stderr.write(
+            '[agent-comm] Wildcard listener error (' +
+              type +
+              '): ' +
+              (err instanceof Error ? err.message : String(err)) +
+              '\n',
+          );
         }
       }
     }

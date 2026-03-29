@@ -21,6 +21,8 @@ const VALID_TYPES = new Set([
   'register',
   'message',
   'state_change',
+  'handoff',
+  'branch',
 ]);
 
 const MAX_PREVIEW_LENGTH = 500;
@@ -98,8 +100,12 @@ export class FeedService {
         target ?? null,
         safePreview ?? null,
       ]);
-    } catch {
-      /* ignore errors in auto-emit — don't break the original action */
+    } catch (err) {
+      process.stderr.write(
+        '[agent-comm] Feed auto-emit error: ' +
+          (err instanceof Error ? err.message : String(err)) +
+          '\n',
+      );
     }
   }
 
@@ -108,6 +114,7 @@ export class FeedService {
       agent?: string;
       type?: string;
       limit?: number;
+      offset?: number;
       since?: string;
     } = {},
   ): FeedEvent[] {
@@ -131,6 +138,10 @@ export class FeedService {
     const limit = Math.min(Math.max(1, options.limit ?? 50), 500);
     sql += ` LIMIT ?`;
     params.push(limit);
+    if (options.offset && options.offset > 0) {
+      sql += ` OFFSET ?`;
+      params.push(options.offset);
+    }
 
     return this.db.queryAll<FeedRow>(sql, params).map(rowToFeedEvent);
   }

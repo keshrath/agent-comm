@@ -36,6 +36,9 @@ Unified timeline of structured events across all agents. Filter by event type (c
 - Reaction display (grouped by reaction text with agent tooltips)
 - Importance badges (urgent, high)
 - Forwarded message detection with styled attribution
+- **Handoff messages** rendered with distinct orange styling and swap icon
+- **Branch indicators** on messages showing fork points and branch listings in detail view
+- **Stuck detection** — "idle" badge with time since last activity on agent cards when agents are alive but inactive
 - Toast notifications for agent join/leave and new messages
 - Nav badges with live counts
 - Total message count from database (not capped by local display limit)
@@ -47,7 +50,7 @@ Unified timeline of structured events across all agents. Filter by event type (c
 
 Dashboard connects via WebSocket for real-time updates:
 
-- **On connect:** receives full state snapshot (`type: "state"`) with `agents`, `channels`, `messages`, `messageCount`, `state`, `reactions`, `feed`
+- **On connect:** receives full state snapshot (`type: "state"`) with `agents`, `channels`, `messages`, `messageCount`, `state`, `reactions`, `feed`, `branches`
 - **Per event:** receives incremental updates (`agent:registered`, `message:sent`, `state:changed`, `message:reacted`, etc.)
 - **Send `{ "type": "refresh" }`** to request a fresh full state
 - **Event subscription:** send `{ "type": "subscribe", "events": ["message:sent", "agent:registered"] }` to filter events

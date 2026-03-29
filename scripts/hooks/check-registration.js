@@ -64,7 +64,7 @@ function run() {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
-            additionalContext: `No agent-comm session. Call comm_register first, then comm_channel_join "general".`,
+            additionalContext: `No agent-comm session. Call comm_register first, then comm_channel({ action: "join", channel: "general" }).`,
           },
         }),
       );
@@ -80,7 +80,7 @@ function run() {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
-            additionalContext: `${onlineAgents} agents online. Consider posting a status update to "general" or using comm_state_set to share your progress.`,
+            additionalContext: `${onlineAgents} agents online. Consider posting a status update to "general" or using comm_state({ action: "set" }) to share your progress.`,
           },
         }),
       );

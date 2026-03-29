@@ -87,7 +87,7 @@ describe('ChannelService', () => {
       ctx.channels.archive(ch.id);
 
       const archived = ctx.channels.getById(ch.id);
-      expect(archived!.archived_at).toBeDefined();
+      expect(new Date(archived!.archived_at!).getTime()).toBeGreaterThan(0);
     });
 
     it('hides archived channels from default list', () => {
@@ -111,18 +111,29 @@ describe('ChannelService', () => {
   });
 
   describe('events', () => {
-    it('emits channel events', () => {
-      const events: string[] = [];
-      ctx.events.on('channel:created', () => events.push('created'));
-      ctx.events.on('channel:member_joined', () => events.push('joined'));
-      ctx.events.on('channel:archived', () => events.push('archived'));
+    it('emits channel events with correct payloads', () => {
+      const created: Array<{ type: string; data: Record<string, unknown> }> = [];
+      const joined: Array<{ type: string; data: Record<string, unknown> }> = [];
+      const archived: Array<{ type: string; data: Record<string, unknown> }> = [];
+      ctx.events.on('channel:created', (e) => created.push(e as (typeof created)[0]));
+      ctx.events.on('channel:member_joined', (e) => joined.push(e as (typeof joined)[0]));
+      ctx.events.on('channel:archived', (e) => archived.push(e as (typeof archived)[0]));
 
       const ch = ctx.channels.create('evented', agentId);
       ctx.channels.archive(ch.id);
 
-      expect(events).toContain('created');
-      expect(events).toContain('joined');
-      expect(events).toContain('archived');
+      expect(created).toHaveLength(1);
+      expect(created[0].type).toBe('channel:created');
+      expect((created[0].data.channel as Record<string, unknown>).name).toBe('evented');
+
+      expect(joined).toHaveLength(1);
+      expect(joined[0].type).toBe('channel:member_joined');
+      expect(joined[0].data.channelId).toBe(ch.id);
+      expect(joined[0].data.agentId).toBe(agentId);
+
+      expect(archived).toHaveLength(1);
+      expect(archived[0].type).toBe('channel:archived');
+      expect(archived[0].data.channelId).toBe(ch.id);
     });
   });
 });

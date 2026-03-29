@@ -20,6 +20,10 @@ All endpoints return JSON. CORS enabled on all routes.
 | GET    | `/api/state`                   | List state entries (`?namespace=&prefix=`)              |
 | GET    | `/api/state/:namespace/:key`   | Get specific state entry                                |
 | GET    | `/api/feed`                    | Activity feed events (`?agent=&type=&since=&limit=50`)  |
+| GET    | `/api/branches`                | List branches (`?message_id=` to filter by parent)      |
+| GET    | `/api/branches/:id`            | Get specific branch by ID                               |
+| GET    | `/api/branches/:id/messages`   | Get messages in a branch                                |
+| GET    | `/api/stuck`                   | Detect stuck agents (`?threshold_minutes=10`)           |
 | GET    | `/api/overview`                | Full snapshot (agents, channels, messages, state, feed) |
 | GET    | `/api/export`                  | Full database export as JSON                            |
 

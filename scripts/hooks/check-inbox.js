@@ -72,7 +72,7 @@ process.stdin.on('end', () => {
     // If other agents are online and this agent hasn't communicated in 15 min, nudge
     if (agentRow.cnt > 1 && !lastSent?.last_msg) {
       parts.push(
-        `${agentRow.cnt} agents online but you haven't communicated recently. Post a status update to "general" or set your status with comm_set_status.`,
+        `${agentRow.cnt} agents online but you haven't communicated recently. Post a status update to "general" or set your status with comm_agents({ action: "status" }).`,
       );
     }
 

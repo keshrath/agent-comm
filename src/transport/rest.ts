@@ -63,7 +63,17 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   // API routes
   // -----------------------------------------------------------------------
 
-  const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  let pkg: { version: string };
+  try {
+    pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] Failed to read package.json: ' +
+        (err instanceof Error ? err.message : String(err)) +
+        '\n',
+    );
+    pkg = { version: '0.0.0' };
+  }
 
   route('GET', '/health', (_req, res) => {
     json(res, {
@@ -79,13 +89,13 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   });
 
   route('GET', '/api/agents/:id', (_req, res, params) => {
-    const agent = ctx.agents.getById(params.id) ?? ctx.agents.getByName(params.id);
+    const agent = ctx.agents.resolveByNameOrId(params.id);
     if (!agent) return json(res, { error: 'Not found' }, 404);
     json(res, agent);
   });
 
   route('GET', '/api/agents/:id/heartbeat', (_req, res, params) => {
-    const agent = ctx.agents.getById(params.id) ?? ctx.agents.getByName(params.id);
+    const agent = ctx.agents.resolveByNameOrId(params.id);
     if (!agent) return json(res, { error: 'Not found' }, 404);
     const now = Date.now();
     const hbTime = new Date(
@@ -184,7 +194,7 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   });
 
   route('GET', '/api/feed', (req, res) => {
-    const url = new URL(req.url!);
+    const url = new URL(req.url!, `http://${req.headers.host}`);
     const agent = url.searchParams.get('agent') ?? undefined;
     const type = url.searchParams.get('type') ?? undefined;
     const since = url.searchParams.get('since') ?? undefined;
@@ -194,10 +204,47 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     );
     let agentId: string | undefined;
     if (agent) {
-      const resolved = ctx.agents.getByName(agent) ?? ctx.agents.getById(agent);
+      const resolved = ctx.agents.resolveByNameOrId(agent);
       agentId = resolved?.id;
     }
-    json(res, ctx.feed.query({ agent: agentId, type, since, limit }));
+    const offset = parseInt(url.searchParams.get('offset') ?? '0', 10) || 0;
+    json(res, ctx.feed.query({ agent: agentId, type, since, limit, offset }));
+  });
+
+  route('GET', '/api/branches', (req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const messageId = url.searchParams.get('message_id');
+    const parentId = messageId ? parseInt(messageId, 10) : undefined;
+    json(res, ctx.branches.list(parentId));
+  });
+
+  route('GET', '/api/branches/:id', (_req, res, params) => {
+    const id = parseInt(params.id, 10);
+    if (isNaN(id)) return json(res, { error: 'Invalid branch ID' }, 400);
+    const branch = ctx.branches.getById(id);
+    if (!branch) return json(res, { error: 'Not found' }, 404);
+    json(res, branch);
+  });
+
+  route('GET', '/api/branches/:id/messages', (_req, res, params) => {
+    const id = parseInt(params.id, 10);
+    if (isNaN(id)) return json(res, { error: 'Invalid branch ID' }, 400);
+    try {
+      json(res, ctx.branches.branchMessages(id));
+    } catch (err) {
+      process.stderr.write(
+        '[agent-comm] Branch messages error: ' +
+          (err instanceof Error ? err.message : String(err)) +
+          '\n',
+      );
+      json(res, { error: 'Not found' }, 404);
+    }
+  });
+
+  route('GET', '/api/stuck', (req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const threshold = parseInt(url.searchParams.get('threshold_minutes') ?? '10', 10) || 10;
+    json(res, ctx.agents.stuckAgents(threshold));
   });
 
   route('GET', '/api/overview', (_req, res) => {
@@ -206,7 +253,13 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     const recentMessages = ctx.messages.list({ limit: 30 });
     const stateEntries = ctx.state.list();
     const feedEvents = ctx.feed.recent(20);
-    json(res, { agents, channels, recentMessages, stateEntries, feedEvents });
+    json(res, {
+      agents,
+      channels,
+      recent_messages: recentMessages,
+      state_entries: stateEntries,
+      feed_events: feedEvents,
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -236,7 +289,12 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
           } else {
             resolve(body as Record<string, unknown>);
           }
-        } catch {
+        } catch (err) {
+          process.stderr.write(
+            '[agent-comm] Request body parse error: ' +
+              (err instanceof Error ? err.message : String(err)) +
+              '\n',
+          );
           reject(new ValidationError('Invalid JSON in request body'));
         }
       });
@@ -256,7 +314,7 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     if (!content || typeof content !== 'string')
       return json(res, { error: '"content" is required' }, 400);
 
-    const sender = ctx.agents.getByName(from) ?? ctx.agents.getById(from);
+    const sender = ctx.agents.resolveByNameOrId(from);
     if (!sender) return json(res, { error: `Agent not found: ${from}` }, 404);
 
     // Security: only allow sending as online/idle agents to reduce impersonation risk.
@@ -270,7 +328,7 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
 
     let toAgentId: string | undefined;
     if (to) {
-      const target = ctx.agents.getByName(to) ?? ctx.agents.getById(to);
+      const target = ctx.agents.resolveByNameOrId(to);
       if (!target) return json(res, { error: `Agent not found: ${to}` }, 404);
       toAgentId = target.id;
     }
@@ -397,6 +455,11 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
         if (err instanceof CommError) {
           json(res, { error: err.message, code: err.code }, err.statusCode);
         } else {
+          process.stderr.write(
+            '[agent-comm] REST handler error: ' +
+              (err instanceof Error ? err.message : String(err)) +
+              '\n',
+          );
           json(res, { error: 'Internal server error' }, 500);
         }
       }
@@ -417,7 +480,10 @@ function serveStatic(res: ServerResponse, baseDir: string, pathname: string): vo
   let decoded: string;
   try {
     decoded = decodeURIComponent(pathname);
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] URI decode error: ' + (err instanceof Error ? err.message : String(err)) + '\n',
+    );
     res.writeHead(400);
     res.end('Bad request');
     return;
@@ -432,7 +498,12 @@ function serveStatic(res: ServerResponse, baseDir: string, pathname: string): vo
   let realBase: string;
   try {
     realBase = realpathSync(baseDir);
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] Static base dir resolve error: ' +
+        (err instanceof Error ? err.message : String(err)) +
+        '\n',
+    );
     res.writeHead(404);
     res.end('Not found');
     return;
@@ -448,7 +519,12 @@ function serveStatic(res: ServerResponse, baseDir: string, pathname: string): vo
   let realFilePath: string;
   try {
     realFilePath = realpathSync(filePath);
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] Static file resolve error: ' +
+        (err instanceof Error ? err.message : String(err)) +
+        '\n',
+    );
     realFilePath = filePath;
   }
 
@@ -464,13 +540,23 @@ function serveStatic(res: ServerResponse, baseDir: string, pathname: string): vo
     const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
     res.end(content);
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] Static file read error: ' +
+        (err instanceof Error ? err.message : String(err)) +
+        '\n',
+    );
     try {
       const indexPath = join(baseDir, 'index.html');
       const indexContent = readFileSync(indexPath);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(indexContent);
-    } catch {
+    } catch (fallbackErr) {
+      process.stderr.write(
+        '[agent-comm] Static index fallback error: ' +
+          (fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)) +
+          '\n',
+      );
       res.writeHead(404);
       res.end('Not found');
     }

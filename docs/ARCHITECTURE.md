@@ -11,7 +11,8 @@ src/
 ├── storage/
 │   └── database.ts       # SQLite wrapper: WAL mode, versioned migrations, parameterized queries
 ├── domain/
-│   ├── agents.ts         # Registration, presence, skill discovery, heartbeat reaper
+│   ├── agents.ts         # Registration, presence, skill discovery, heartbeat reaper, stuck detection
+│   ├── branches.ts       # Conversation branching — fork threads at any message point
 │   ├── feed.ts           # Activity feed — structured event logging and querying
 │   ├── channels.ts       # Channel lifecycle, membership, archiving
 │   ├── messages.ts       # Send/receive, threading, read/ack, FTS5 search, broadcast
@@ -21,7 +22,7 @@ src/
 │   ├── rate-limit.ts     # Per-agent token bucket rate limiter
 │   └── reactions.ts      # Message reactions (add/remove/query)
 ├── transport/
-│   ├── mcp.ts            # 36 MCP tool definitions + dispatch + input validation
+│   ├── mcp.ts            # 12 MCP tool definitions + dispatch + input validation
 │   ├── rest.ts           # HTTP router (node:http, zero frameworks) + static serving
 │   └── ws.ts             # WebSocket: real-time push, ping/pong, event filtering
 └── ui/
@@ -37,7 +38,7 @@ src/
 - **3 runtime deps** — `better-sqlite3`, `uuid`, `ws`
 - **Typed errors** — `CommError` hierarchy with HTTP status codes (400, 404, 409, 422, 429)
 - **Input validation** — runtime type checking on all MCP tool inputs
-- **Agent-gated access** — all tools require prior `comm_register` (except `comm_list_agents`)
+- **Agent-gated access** — all tools require prior `comm_register` (except `comm_agents` list action)
 
 ## Message delivery model
 
@@ -50,7 +51,7 @@ The **dashboard** gets real-time push via WebSocket, so humans can see messages 
 - The `UserPromptSubmit` hook queries the database on every user message — if there are messages in the last 5 minutes, it tells the agent to call `comm_inbox`. This is the primary mechanism.
 - The `SessionStart` hook includes `comm_inbox` as step 5 of the mandatory startup sequence
 - Agents can call `comm_inbox` at the start of each task
-- For time-critical coordination, use `comm_state_cas` (shared state with CAS) which agents can check synchronously
+- For time-critical coordination, use `comm_state({ action: "cas", ... })` (shared state with CAS) which agents can check synchronously
 
 ## Database
 
@@ -139,7 +140,7 @@ Per-agent token bucket rate limiter on message sending:
 
 - **Capacity:** 10 tokens (burst size)
 - **Refill:** 1 token/second (60 messages/min sustained)
-- Applied to `comm_send`, `comm_broadcast`, `comm_channel_send`
+- Applied to `comm_send` (all modes: direct, broadcast, channel)
 - Returns HTTP 429 / error code `RATE_LIMITED` when exceeded
 
 ## Development
@@ -166,6 +167,6 @@ npm run check        # Full CI: typecheck + lint + format + test
 | Domain: Rate limit     | 6     | Token bucket capacity, refill, isolation, reset                              |
 | Domain: Reactions      | 26    | React/unreact, validation, events, bulk queries, status text, channel update |
 | Domain: Edge cases     | 43    | Boundary values, injection prevention, concurrency, data integrity           |
-| Transport: MCP         | 32    | All 36 tools, auth gates, rate limiting, input validation                    |
+| Transport: MCP         | 41    | All 12 tools, auth gates, rate limiting, input validation                    |
 | Integration: Workflows | 10    | Multi-agent scenarios (coordination, CAS locking, forwarding, reactions)     |
 | E2E: Server            | 21    | REST endpoints, WebSocket state/events, export, error codes                  |

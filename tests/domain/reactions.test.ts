@@ -30,7 +30,7 @@ describe('ReactionService', () => {
     expect(reactions).toHaveLength(1);
     expect(reactions[0].agent_id).toBe(alice.id);
     expect(reactions[0].reaction).toBe('thumbsup');
-    expect(reactions[0].created_at).toBeDefined();
+    expect(new Date(reactions[0].created_at).getTime()).toBeGreaterThan(0);
   });
 
   it('removes a reaction with unreact', () => {
@@ -234,36 +234,6 @@ describe('MessageService — count', () => {
 });
 
 // ---------------------------------------------------------------------------
-// State change events include value
-// ---------------------------------------------------------------------------
-
-describe('StateService — state:changed event payload', () => {
-  let ctx: AppContext;
-  let agentId: string;
-
-  beforeEach(() => {
-    ctx = createTestContext();
-    agentId = ctx.agents.register({ name: 'state-tester' }).id;
-  });
-  afterEach(() => {
-    ctx.close();
-  });
-
-  it('emits state:changed with namespace, key, value, updated_by', () => {
-    const events: Array<{ type: string; data: Record<string, unknown> }> = [];
-    ctx.events.on('state:changed', (e) => events.push(e as (typeof events)[0]));
-
-    ctx.state.set('myns', 'mykey', 'myval', agentId);
-
-    expect(events).toHaveLength(1);
-    expect(events[0].data.namespace).toBe('myns');
-    expect(events[0].data.key).toBe('mykey');
-    expect(events[0].data.value).toBe('myval');
-    expect(events[0].data.updated_by).toBe(agentId);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Configurable retention
 // ---------------------------------------------------------------------------
 
@@ -280,19 +250,17 @@ describe('CleanupService — configurable retention', () => {
   it('accepts custom retention and runs successfully', () => {
     const customCleanup = new CleanupService(ctx.db, 30);
     const stats = customCleanup.run();
-    expect(stats).toHaveProperty('agents');
-    expect(stats).toHaveProperty('messages');
-    expect(stats).toHaveProperty('reads');
-    expect(stats).toHaveProperty('channels');
-    expect(stats).toHaveProperty('state');
-    expect(typeof stats.agents).toBe('number');
-    expect(typeof stats.messages).toBe('number');
+    expect(stats.agents).toBe(0);
+    expect(stats.messages).toBe(0);
+    expect(stats.reads).toBe(0);
+    expect(stats.channels).toBe(0);
+    expect(stats.state).toBe(0);
     customCleanup.stopTimer();
   });
 
-  it('default retention works', () => {
+  it('default retention returns zero counts on fresh db', () => {
     const stats = ctx.cleanup.run();
-    expect(stats).toBeDefined();
-    expect(stats.agents).toBeGreaterThanOrEqual(0);
+    expect(stats.agents).toBe(0);
+    expect(stats.messages).toBe(0);
   });
 });

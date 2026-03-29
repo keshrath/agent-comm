@@ -477,7 +477,8 @@ describe('Read and acknowledge edge cases', () => {
     ctx.messages.acknowledge(msg.id, bob.id);
     const status = ctx.messages.readStatus(msg.id);
     expect(status).toHaveLength(1);
-    expect(status[0].acked_at).toBeDefined();
+    expect(status[0].agent_id).toBe(bob.id);
+    expect(new Date(status[0].acked_at!).getTime()).toBeGreaterThan(0);
   });
 });
 

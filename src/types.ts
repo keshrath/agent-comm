@@ -18,6 +18,7 @@ export interface Agent {
   readonly last_heartbeat: string;
   readonly registered_at: string;
   readonly skills: readonly Skill[];
+  readonly last_activity: string | null;
 }
 
 export interface AgentCreateInput {
@@ -58,6 +59,7 @@ export interface Message {
   readonly from_agent: string;
   readonly to_agent: string | null;
   readonly thread_id: number | null;
+  readonly branch_id: number | null;
   readonly content: string;
   readonly importance: MessageImportance;
   readonly ack_required: boolean;
@@ -65,10 +67,23 @@ export interface Message {
   readonly edited_at: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Thread Branches
+// ---------------------------------------------------------------------------
+
+export interface ThreadBranch {
+  readonly id: number;
+  readonly parent_message_id: number;
+  readonly name: string | null;
+  readonly created_by: string | null;
+  readonly created_at: string;
+}
+
 export interface MessageSendInput {
   to?: string;
   channel?: string;
   thread_id?: number;
+  branch_id?: number;
   content: string;
   importance?: MessageImportance;
   ack_required?: boolean;
@@ -111,7 +126,9 @@ export type EventType =
   | 'message:reacted'
   | 'message:unreacted'
   | 'state:changed'
-  | 'state:deleted';
+  | 'state:deleted'
+  | 'branch:created'
+  | 'handoff:sent';
 
 export interface CommEvent {
   readonly type: EventType;
@@ -197,7 +214,9 @@ export type FeedEventType =
   | 'custom'
   | 'register'
   | 'message'
-  | 'state_change';
+  | 'state_change'
+  | 'handoff'
+  | 'branch';
 
 export interface FeedEvent {
   readonly id: number;

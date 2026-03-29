@@ -19,6 +19,7 @@ interface MessageRow {
   from_agent: string;
   to_agent: string | null;
   thread_id: number | null;
+  branch_id: number | null;
   content: string;
   importance: string;
   ack_required: number;
@@ -29,6 +30,7 @@ interface MessageRow {
 function rowToMessage(row: MessageRow): Message {
   return {
     ...row,
+    branch_id: row.branch_id ?? null,
     importance: row.importance as MessageImportance,
     ack_required: row.ack_required === 1,
   };
@@ -99,13 +101,14 @@ export class MessageService {
     }
 
     const result = this.db.run(
-      `INSERT INTO messages (channel_id, from_agent, to_agent, thread_id, content, importance, ack_required)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO messages (channel_id, from_agent, to_agent, thread_id, branch_id, content, importance, ack_required)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.channel ?? null,
         fromAgentId,
         input.to ?? null,
         input.thread_id ?? null,
+        input.branch_id ?? null,
         input.content,
         input.importance ?? 'normal',
         input.ack_required ? 1 : 0,

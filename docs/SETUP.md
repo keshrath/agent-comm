@@ -256,9 +256,9 @@ agent-comm ships with four hook scripts across six events (including subagent li
 Injects a system message with a mandatory startup sequence:
 
 1. `comm_register` — register with a unique session name
-2. `comm_channel_create("general")` — ensure the general channel exists
-3. `comm_channel_join("general")` — join it
-4. `comm_channel_send` — announce what work this session will do
+2. `comm_channel({ action: "create", channel: "general" })` — ensure the general channel exists
+3. `comm_channel({ action: "join", channel: "general" })` — join it
+4. `comm_send({ channel: "general", content: "..." })` — announce what work this session will do
 5. `comm_inbox` — check for messages from other agents
 
 #### UserPromptSubmit (`scripts/hooks/check-registration.js`)
@@ -283,7 +283,7 @@ The hook fires when a subagent is spawned (e.g., `run_in_background: true` agent
 
 #### Stop (`scripts/hooks/on-stop.js`)
 
-Asks the agent to post a work summary to `#general` and call `comm_unregister`.
+Asks the agent to post a work summary to `#general` and call `comm_agents({ action: "unregister" })`.
 
 #### SubagentStop (`scripts/hooks/on-stop.js`)
 
@@ -346,9 +346,9 @@ You are part of a team of agents. Communicate actively — not just at startup.
 
 ### At session start
 
-1. `comm_register` — register with a unique name (check `comm_list_agents` first)
-2. `comm_channel_join "general"`
-3. `comm_channel_send` to "general" — announce what you're working on
+1. `comm_register` — register with a unique name (check `comm_agents({ action: "list" })` first)
+2. `comm_channel({ action: "join", channel: "general" })`
+3. `comm_send({ channel: "general", content: "..." })` — announce what you're working on
 4. `comm_inbox` — check for messages from other agents
 
 ### During your session
@@ -356,25 +356,25 @@ You are part of a team of agents. Communicate actively — not just at startup.
 - **Check inbox often** — call `comm_inbox` every few minutes, especially before starting new work
 - **Post status updates** — after completing a milestone, post to "general"
 - **Announce shared file edits** — before touching shared config/schemas/dependencies, warn in "general"
-- **Ask for help** — if blocked, broadcast or post to "general"
-- **Set your status** — `comm_set_status` with what you're doing (e.g. "implementing auth")
+- **Ask for help** — if blocked, use `comm_send({ broadcast: true, content: "..." })` or post to "general"
+- **Set your status** — `comm_agents({ action: "status", status_text: "implementing auth" })`
 - **Reply to messages** — don't ignore messages from other agents
 
-### Shared state (`comm_state_*`)
+### Shared state (`comm_state`)
 
 Use shared state to coordinate without message spam:
 
-- `comm_state_set("locks", "path/to/file", "my-name")` — claim a file before editing
-- `comm_state_get("locks", "path/to/file")` — check if someone else is editing
-- `comm_state_set("progress", "task-42", "testing")` — share task progress
-- `comm_state_cas` — atomic compare-and-swap for safe concurrent updates
-- `comm_state_delete` — release locks when done
+- `comm_state({ action: "set", namespace: "locks", key: "path/to/file", value: "my-name" })` — claim a file before editing
+- `comm_state({ action: "get", namespace: "locks", key: "path/to/file" })` — check if someone else is editing
+- `comm_state({ action: "set", namespace: "progress", key: "task-42", value: "testing" })` — share task progress
+- `comm_state({ action: "cas", ... })` — atomic compare-and-swap for safe concurrent updates
+- `comm_state({ action: "delete", ... })` — release locks when done
 
 ### Before stopping
 
 1. Post a summary to "general" of what you accomplished
-2. Release any locks via `comm_state_delete`
-3. `comm_unregister` to go offline cleanly
+2. Release any locks via `comm_state({ action: "delete", ... })`
+3. `comm_agents({ action: "unregister" })` to go offline cleanly
 ```
 
 ### Why this matters
