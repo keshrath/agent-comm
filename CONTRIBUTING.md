@@ -56,18 +56,19 @@ agent-comm/
     server.ts             HTTP + WebSocket standalone server
     types.ts              Shared types
     domain/
-      agents.ts           Agent registration, heartbeat, presence
+      agents.ts           Agent registration, heartbeat, presence, skill-based discovery
       channels.ts         Channel creation, join/leave, membership
       messages.ts         Direct + channel messaging, threading, forwarding
       state.ts            Shared key-value state with CAS support
       reactions.ts        Message reactions
+      feed.ts             Activity feed (structured event logging + queries)
       cleanup.ts          Stale agent/message cleanup
       rate-limit.ts       Per-agent rate limiting
       events.ts           In-process event bus
     storage/
-      database.ts         SQLite (WAL mode, schema versioning V2, FK cascades)
+      database.ts         SQLite (WAL mode, schema versioning V3, FK cascades)
     transport/
-      mcp.ts              33 MCP tool definitions + dispatch
+      mcp.ts              36 MCP tool definitions + dispatch
       rest.ts             REST API endpoints + static file serving
       ws.ts               WebSocket event streaming
     ui/
@@ -120,7 +121,7 @@ Tests use **vitest** with in-memory SQLite databases. Each test gets a fresh con
 
 ### What to Test
 
-- Domain: agent registration/presence, channel CRUD, messaging/threading, shared state/CAS, reactions, rate limiting
+- Domain: agent registration/presence, channel CRUD, messaging/threading, shared state/CAS, reactions, activity feed, rate limiting
 - Integration: multi-agent workflows, cross-feature interactions
 - Transport: MCP tool dispatch, REST endpoints, WebSocket events
 - E2E: HTTP server lifecycle, WebSocket connections
@@ -134,7 +135,7 @@ Schema changes go in `src/storage/database.ts`. Follow this pattern:
 3. Migrations **must be idempotent** — use `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN` with existence checks
 4. All tables use foreign keys with `ON DELETE CASCADE`
 
-Current schema version: **V2**
+Current schema version: **V3**
 
 ## Pull Requests
 

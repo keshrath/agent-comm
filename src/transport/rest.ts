@@ -183,12 +183,30 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     json(res, entry);
   });
 
+  route('GET', '/api/feed', (req, res) => {
+    const url = new URL(req.url!);
+    const agent = url.searchParams.get('agent') ?? undefined;
+    const type = url.searchParams.get('type') ?? undefined;
+    const since = url.searchParams.get('since') ?? undefined;
+    const limit = Math.min(
+      Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10) || 50),
+      500,
+    );
+    let agentId: string | undefined;
+    if (agent) {
+      const resolved = ctx.agents.getByName(agent) ?? ctx.agents.getById(agent);
+      agentId = resolved?.id;
+    }
+    json(res, ctx.feed.query({ agent: agentId, type, since, limit }));
+  });
+
   route('GET', '/api/overview', (_req, res) => {
     const agents = ctx.agents.list({ includeOffline: true });
     const channels = ctx.channels.list();
     const recentMessages = ctx.messages.list({ limit: 30 });
     const stateEntries = ctx.state.list();
-    json(res, { agents, channels, recentMessages, stateEntries });
+    const feedEvents = ctx.feed.recent(20);
+    json(res, { agents, channels, recentMessages, stateEntries, feedEvents });
   });
 
   // -----------------------------------------------------------------------

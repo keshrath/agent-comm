@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-29
+
+### Added
+
+- **Activity Feed** — new `feed_events` table, `comm_log_activity` and `comm_feed` MCP tools, `GET /api/feed` REST endpoint, and Activity tab on the dashboard. Agents report structured events (commits, test results, file edits, errors) to a shared timeline.
+- **Skill-Based Discovery** — `comm_register` now accepts an optional `skills` parameter (array of `{id, name, tags[]}`). New `comm_discover` tool finds agents by skill ID or tag for dynamic capability-based routing.
+- Database schema V3 with `feed_events` table and `skills` column on `agents`
+
+### Changed
+
+- MCP tool count: 33 → 36
+
 ## [1.0.15] - 2026-03-28
 
 ### Fixed
@@ -87,6 +99,7 @@ First public release on GitHub and npm.
 - E2E + integration + unit tests (214 tests across 11 suites)
 - Prettier, ESLint, Husky pre-commit hooks, lint-staged
 
+[1.1.0]: https://github.com/keshrath/agent-comm/compare/v1.0.15...v1.1.0
 [1.0.15]: https://github.com/keshrath/agent-comm/compare/v1.0.14...v1.0.15
 [1.0.14]: https://github.com/keshrath/agent-comm/compare/v1.0.2...v1.0.14
 [1.0.2]: https://github.com/keshrath/agent-comm/compare/v1.0.1...v1.0.2

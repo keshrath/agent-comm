@@ -19,7 +19,8 @@ All endpoints return JSON. CORS enabled on all routes.
 | GET    | `/api/search`                  | Full-text search (`?q=keyword&limit=20&channel=&from=`) |
 | GET    | `/api/state`                   | List state entries (`?namespace=&prefix=`)              |
 | GET    | `/api/state/:namespace/:key`   | Get specific state entry                                |
-| GET    | `/api/overview`                | Full snapshot (agents, channels, messages, state)       |
+| GET    | `/api/feed`                    | Activity feed events (`?agent=&type=&since=&limit=50`)  |
+| GET    | `/api/overview`                | Full snapshot (agents, channels, messages, state, feed) |
 | GET    | `/api/export`                  | Full database export as JSON                            |
 
 ## Write endpoints

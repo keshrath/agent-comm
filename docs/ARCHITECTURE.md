@@ -11,7 +11,8 @@ src/
 ├── storage/
 │   └── database.ts       # SQLite wrapper: WAL mode, versioned migrations, parameterized queries
 ├── domain/
-│   ├── agents.ts         # Registration, presence, discovery, heartbeat reaper
+│   ├── agents.ts         # Registration, presence, skill discovery, heartbeat reaper
+│   ├── feed.ts           # Activity feed — structured event logging and querying
 │   ├── channels.ts       # Channel lifecycle, membership, archiving
 │   ├── messages.ts       # Send/receive, threading, read/ack, FTS5 search, broadcast
 │   ├── state.ts          # Namespaced KV with CAS, input validation
@@ -20,7 +21,7 @@ src/
 │   ├── rate-limit.ts     # Per-agent token bucket rate limiter
 │   └── reactions.ts      # Message reactions (add/remove/query)
 ├── transport/
-│   ├── mcp.ts            # 33 MCP tool definitions + dispatch + input validation
+│   ├── mcp.ts            # 36 MCP tool definitions + dispatch + input validation
 │   ├── rest.ts           # HTTP router (node:http, zero frameworks) + static serving
 │   └── ws.ts             # WebSocket: real-time push, ping/pong, event filtering
 └── ui/
@@ -61,10 +62,19 @@ erDiagram
         text id PK
         text name UK
         text capabilities
+        text skills
         text metadata
         text status
         text status_text
         text last_heartbeat
+    }
+    feed_events {
+        int id PK
+        text agent_id FK
+        text type
+        text target
+        text preview
+        text created_at
     }
     channels {
         text id PK
@@ -109,6 +119,7 @@ erDiagram
     messages ||--o{ messages : threads
     messages ||--o{ message_reads : tracked_by
     messages ||--o{ message_reactions : has
+    agents ||--o{ feed_events : logs
 ```
 
 ### Automatic cleanup
@@ -155,6 +166,6 @@ npm run check        # Full CI: typecheck + lint + format + test
 | Domain: Rate limit     | 6     | Token bucket capacity, refill, isolation, reset                              |
 | Domain: Reactions      | 26    | React/unreact, validation, events, bulk queries, status text, channel update |
 | Domain: Edge cases     | 43    | Boundary values, injection prevention, concurrency, data integrity           |
-| Transport: MCP         | 32    | All 33 tools, auth gates, rate limiting, input validation                    |
+| Transport: MCP         | 32    | All 36 tools, auth gates, rate limiting, input validation                    |
 | Integration: Workflows | 10    | Multi-agent scenarios (coordination, CAS locking, forwarding, reactions)     |
 | E2E: Server            | 21    | REST endpoints, WebSocket state/events, export, error codes                  |

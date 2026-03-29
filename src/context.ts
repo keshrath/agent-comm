@@ -14,6 +14,7 @@ import { StateService } from './domain/state.js';
 import { CleanupService } from './domain/cleanup.js';
 import { RateLimiter } from './domain/rate-limit.js';
 import { ReactionService } from './domain/reactions.js';
+import { FeedService } from './domain/feed.js';
 
 export interface AppContext {
   readonly db: Db;
@@ -25,6 +26,7 @@ export interface AppContext {
   readonly cleanup: CleanupService;
   readonly rateLimiter: RateLimiter;
   readonly reactions: ReactionService;
+  readonly feed: FeedService;
   close(): void;
 }
 
@@ -45,6 +47,7 @@ export function createContext(dbOptions?: DbOptions): AppContext {
   const cleanup = new CleanupService(db, retentionDays);
   const rateLimiter = new RateLimiter();
   const reactions = new ReactionService(db, events);
+  const feed = new FeedService(db, events);
 
   // Wire cross-service dependencies (avoids circular imports)
   messages.setAgentLookup(agents);
@@ -59,6 +62,7 @@ export function createContext(dbOptions?: DbOptions): AppContext {
     cleanup,
     rateLimiter,
     reactions,
+    feed,
     close() {
       if (closed) return;
       closed = true;

@@ -6,7 +6,7 @@
 // =============================================================================
 
 import type { AppContext } from '../context.js';
-import type { AgentStatus, MessageImportance, ToolDefinition } from '../types.js';
+import type { AgentStatus, MessageImportance, Skill, ToolDefinition } from '../types.js';
 import { NotFoundError, ValidationError } from '../types.js';
 
 // Shared schema fragments for consistency
@@ -39,6 +39,19 @@ export const tools: ToolDefinition[] = [
           description: 'Capability tags (e.g. "code-review", "testing")',
         },
         metadata: { type: 'object', description: 'Arbitrary metadata (JSON object)' },
+        skills: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Unique skill identifier' },
+              name: { type: 'string', description: 'Human-readable skill name' },
+              tags: { type: 'array', items: { type: 'string' }, description: 'Tags for discovery' },
+            },
+            required: ['id', 'name'],
+          },
+          description: 'Skills this agent provides (for skill-based discovery)',
+        },
       },
       required: ['name'],
     },
@@ -420,6 +433,55 @@ export const tools: ToolDefinition[] = [
       required: ['key', 'expected', 'new_value'],
     },
   },
+  {
+    name: 'comm_log_activity',
+    description: 'Log a structured activity event to the feed (e.g. commit, test_pass, file_edit).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: [
+            'commit',
+            'test_pass',
+            'test_fail',
+            'file_edit',
+            'task_complete',
+            'error',
+            'custom',
+          ],
+          description: 'Event type',
+        },
+        target: { type: 'string', description: 'Target of the action (e.g. file path, test name)' },
+        preview: { type: 'string', description: 'Short preview text (max 500 chars)' },
+      },
+      required: ['type'],
+    },
+  },
+  {
+    name: 'comm_feed',
+    description: 'Query the activity feed with optional filters.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: { type: 'string', description: 'Filter by agent name or ID' },
+        type: { type: 'string', description: 'Filter by event type' },
+        limit: { type: 'number', description: 'Max events to return (default: 50, max: 500)' },
+        since: { type: 'string', description: 'Only events after this ISO timestamp' },
+      },
+    },
+  },
+  {
+    name: 'comm_discover',
+    description: 'Find agents by skill ID or tag. Returns ranked list of matching agents.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill: { type: 'string', description: 'Skill ID or name to search for' },
+        tag: { type: 'string', description: 'Tag to search for across all agent skills' },
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -574,13 +636,31 @@ export function createToolHandler(ctx: AppContext): ToolHandler {
             throw new ValidationError('"metadata" must be a plain object.');
           }
         }
+        const rawSkills = args.skills;
+        if (rawSkills !== undefined && rawSkills !== null) {
+          if (!Array.isArray(rawSkills)) {
+            throw new ValidationError('"skills" must be an array.');
+          }
+          for (const s of rawSkills) {
+            if (
+              typeof s !== 'object' ||
+              !s ||
+              typeof (s as Record<string, unknown>).id !== 'string' ||
+              typeof (s as Record<string, unknown>).name !== 'string'
+            ) {
+              throw new ValidationError('Each skill must have "id" (string) and "name" (string).');
+            }
+          }
+        }
         const agent = ctx.agents.register({
           name: requireString(args, 'name'),
           capabilities: rawCaps as string[] | undefined,
           metadata: rawMeta as Record<string, unknown> | undefined,
+          skills: rawSkills as Skill[] | undefined,
         });
         currentAgent = { id: agent.id, name: agent.name };
         startHeartbeat();
+        ctx.feed.logInternal(agent.id, 'register', agent.name, agent.name + ' registered');
         return agent;
       }
 
@@ -619,13 +699,20 @@ export function createToolHandler(ctx: AppContext): ToolHandler {
         const self = requireAgent();
         ctx.rateLimiter.check(self.id);
         const target = resolveAgent(requireString(args, 'to'));
-        return ctx.messages.send(self.id, {
+        const msg = ctx.messages.send(self.id, {
           to: target.id,
           content: requireString(args, 'content'),
           thread_id: optNumber(args, 'thread_id'),
           importance: optImportance(args, 'importance'),
           ack_required: optBoolean(args, 'ack_required'),
         });
+        ctx.feed.logInternal(
+          self.id,
+          'message',
+          target.name,
+          (msg.content || '').substring(0, 100),
+        );
+        return msg;
       }
 
       case 'comm_broadcast': {
@@ -842,12 +929,19 @@ export function createToolHandler(ctx: AppContext): ToolHandler {
 
       case 'comm_state_set': {
         const self = requireAgent();
-        return ctx.state.set(
+        const entry = ctx.state.set(
           optString(args, 'namespace') ?? 'default',
           requireString(args, 'key'),
           requireString(args, 'value'),
           self.id,
         );
+        ctx.feed.logInternal(
+          self.id,
+          'state_change',
+          entry.namespace + '/' + entry.key,
+          entry.value.substring(0, 100),
+        );
+        return entry;
       }
 
       case 'comm_state_get': {
@@ -877,6 +971,40 @@ export function createToolHandler(ctx: AppContext): ToolHandler {
           self.id,
         );
         return { swapped };
+      }
+
+      case 'comm_log_activity': {
+        const self = requireAgent();
+        return ctx.feed.log(
+          self.id,
+          requireString(args, 'type'),
+          optString(args, 'target'),
+          optString(args, 'preview'),
+        );
+      }
+
+      case 'comm_feed': {
+        requireAgent();
+        const feedAgent = optString(args, 'agent');
+        let feedAgentId: string | undefined;
+        if (feedAgent) {
+          const resolved = ctx.agents.getByName(feedAgent) ?? ctx.agents.getById(feedAgent);
+          feedAgentId = resolved?.id;
+        }
+        return ctx.feed.query({
+          agent: feedAgentId,
+          type: optString(args, 'type'),
+          limit: optNumber(args, 'limit'),
+          since: optString(args, 'since'),
+        });
+      }
+
+      case 'comm_discover': {
+        requireAgent();
+        return ctx.agents.discover({
+          skill: optString(args, 'skill'),
+          tag: optString(args, 'tag'),
+        });
       }
 
       default:

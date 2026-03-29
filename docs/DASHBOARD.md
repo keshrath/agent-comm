@@ -4,13 +4,14 @@ Auto-starts at `http://localhost:3421` on first MCP connection, or run standalon
 
 ## Views
 
-| View         | Description                                                                 |
-| ------------ | --------------------------------------------------------------------------- |
-| **Overview** | Stats cards, active agents with status dots, recent activity feed           |
-| **Agents**   | Agent cards with capabilities, status text, message counts, click-to-filter |
-| **Messages** | Split-pane: compact list with avatars + full detail with markdown rendering |
-| **Channels** | Channel cards with message counts, click-to-filter messages                 |
-| **State**    | Key-value table with namespace/key filtering                                |
+| View         | Description                                                                         |
+| ------------ | ----------------------------------------------------------------------------------- |
+| **Overview** | Stats cards, active agents with status dots, recent activity feed                   |
+| **Agents**   | Agent cards with capabilities, status text, message counts, click-to-filter         |
+| **Messages** | Split-pane: compact list with avatars + full detail with markdown rendering         |
+| **Channels** | Channel cards with message counts, click-to-filter messages                         |
+| **State**    | Key-value table with namespace/key filtering                                        |
+| **Activity** | Structured event feed — commits, test results, file edits, errors across all agents |
 
 ## Features
 
@@ -34,7 +35,7 @@ Auto-starts at `http://localhost:3421` on first MCP connection, or run standalon
 
 Dashboard connects via WebSocket for real-time updates:
 
-- **On connect:** receives full state snapshot (`type: "state"`) with `agents`, `channels`, `messages`, `messageCount`, `state`, `reactions`
+- **On connect:** receives full state snapshot (`type: "state"`) with `agents`, `channels`, `messages`, `messageCount`, `state`, `reactions`, `feed`
 - **Per event:** receives incremental updates (`agent:registered`, `message:sent`, `state:changed`, `message:reacted`, etc.)
 - **Send `{ "type": "refresh" }`** to request a fresh full state
 - **Event subscription:** send `{ "type": "subscribe", "events": ["message:sent", "agent:registered"] }` to filter events

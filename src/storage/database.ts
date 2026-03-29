@@ -26,7 +26,7 @@ export interface Db {
   close(): void;
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function createDb(options: DbOptions = {}): Db {
   const dbPath = resolveDbPath(options.path);
@@ -96,6 +96,7 @@ function applySchema(db: Database.Database): void {
 
   if (currentVersion < 1) migrateV1(db);
   if (currentVersion < 2) migrateV2(db);
+  if (currentVersion < 3) migrateV3(db);
 
   db.prepare(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`).run(
     String(SCHEMA_VERSION),
@@ -211,5 +212,25 @@ function migrateV2(db: Database.Database): void {
       PRIMARY KEY (message_id, agent_id, reaction)
     );
     CREATE INDEX IF NOT EXISTS idx_reactions_message ON message_reactions(message_id);
+  `);
+}
+
+function migrateV3(db: Database.Database): void {
+  db.exec(`
+    -- Activity feed events
+    CREATE TABLE IF NOT EXISTS feed_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT,
+      type TEXT NOT NULL,
+      target TEXT,
+      preview TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_feed_events_agent ON feed_events(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_feed_events_type ON feed_events(type);
+    CREATE INDEX IF NOT EXISTS idx_feed_events_created ON feed_events(created_at);
+
+    -- Skills JSON column on agents
+    ALTER TABLE agents ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
   `);
 }

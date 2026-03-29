@@ -107,6 +107,11 @@
               ><span class="material-symbols-outlined nav-icon">database</span>State</a
             >
           </li>
+          <li role="presentation">
+            <a href="#feed" id="tab-feed" class="nav-link" data-view="feed" role="tab" tabindex="-1"
+              ><span class="material-symbols-outlined nav-icon">rss_feed</span>Activity</a
+            >
+          </li>
         </ul>
         <div class="sidebar-footer">
           <span class="connection-status" id="conn-status" role="status" aria-live="polite">
@@ -256,6 +261,33 @@
               <tbody id="state-tbody"></tbody>
             </table>
           </div>
+        </section>
+        <section id="view-feed" class="view" role="tabpanel" aria-labelledby="tab-feed">
+          <h2><span class="material-symbols-outlined view-icon">rss_feed</span>Activity Feed</h2>
+          <div class="toolbar">
+            <div class="search-wrapper">
+              <span class="material-symbols-outlined search-icon">filter_list</span>
+              <select
+                id="feed-type-filter"
+                class="search-input"
+                style="max-width: 200px"
+                aria-label="Filter by type"
+              >
+                <option value="">All types</option>
+                <option value="commit">commit</option>
+                <option value="test_pass">test_pass</option>
+                <option value="test_fail">test_fail</option>
+                <option value="file_edit">file_edit</option>
+                <option value="task_complete">task_complete</option>
+                <option value="error">error</option>
+                <option value="custom">custom</option>
+                <option value="register">register</option>
+                <option value="message">message</option>
+                <option value="state_change">state_change</option>
+              </select>
+            </div>
+          </div>
+          <div id="feed-list" class="feed-timeline"></div>
         </section>
       </main>
     </div>

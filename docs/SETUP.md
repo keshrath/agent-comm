@@ -176,7 +176,7 @@ Hooks automate the agent lifecycle — registration, inbox checks, and cleanup. 
 
 ### Claude Code Hooks
 
-agent-comm ships with four hooks. Run `npm run setup` to install them, or configure manually in `~/.claude/settings.json`:
+agent-comm ships with four hook scripts across six events (including subagent lifecycle). Run `npm run setup` to install them, or configure manually in `~/.claude/settings.json`:
 
 ```json
 {
@@ -214,7 +214,29 @@ agent-comm ships with four hooks. Run `npm run setup` to install them, or config
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/path/to/agent-comm/scripts/hooks/session-start.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/path/to/agent-comm/scripts/hooks/on-stop.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
       {
         "hooks": [
           {
@@ -251,9 +273,21 @@ Reads the SQLite database on every user message to:
 
 Runs after every tool call to check for recent messages (last 2 minutes). Skips agent-comm's own tools to avoid redundant nudges. Combined with UserPromptSubmit, agents are nudged both on user prompts and during active tool use.
 
+#### SubagentStart (`scripts/hooks/session-start.js`)
+
+Reuses the same `session-start.js` script for subagents spawned via Claude Code's Agent tool. Without this, subagents never receive the registration reminder and silently skip agent-comm communication.
+
+The hook fires when a subagent is spawned (e.g., `run_in_background: true` agents). It injects the same startup sequence as `SessionStart`, ensuring subagents register, join channels, and announce their intent — just like the main session.
+
+**This is critical for multi-agent coordination.** Without it, subagents work in isolation and never appear on the dashboard or communicate with other agents.
+
 #### Stop (`scripts/hooks/on-stop.js`)
 
 Asks the agent to post a work summary to `#general` and call `comm_unregister`.
+
+#### SubagentStop (`scripts/hooks/on-stop.js`)
+
+Reuses the same `on-stop.js` script for subagents. Ensures subagents post a summary and unregister when they finish, rather than lingering as "online" until the heartbeat reaper marks them offline.
 
 ### OpenCode Plugins
 

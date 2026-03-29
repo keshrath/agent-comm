@@ -3,8 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)]()
-[![MCP Tools](https://img.shields.io/badge/MCP%20tools-33-purple)]()
-[![REST Endpoints](https://img.shields.io/badge/REST-24%20endpoints-orange)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-36-purple)]()
+[![REST Endpoints](https://img.shields.io/badge/REST-25%20endpoints-orange)]()
 
 **Agent-agnostic intercommunication system.** Lets AI coding agents — Claude Code, Codex CLI, Gemini CLI, Aider, or any custom tool — talk to each other, share state, and coordinate work in real time.
 
@@ -18,21 +18,23 @@
 
 When you run multiple AI agents on the same codebase — code review in one terminal, implementation in another, testing in a third — they have no idea the others exist. They duplicate work, create merge conflicts, and miss context.
 
-|                   | Without agent-comm                   | With agent-comm                      |
-| ----------------- | ------------------------------------ | ------------------------------------ |
-| **Discovery**     | Agents don't know others exist       | Agents register and find each other  |
-| **Coordination**  | Edit the same file, create conflicts | Lock files/regions, divide work      |
-| **Communication** | None — each agent works blind        | Messages, channels, broadcasts       |
-| **State sharing** | Duplicate work, missed context       | Shared KV store with atomic CAS      |
-| **Visibility**    | No idea what's happening             | Real-time dashboard shows everything |
+|                   | Without agent-comm                   | With agent-comm                                      |
+| ----------------- | ------------------------------------ | ---------------------------------------------------- |
+| **Discovery**     | Agents don't know others exist       | Agents register with skills, discover by capability  |
+| **Coordination**  | Edit the same file, create conflicts | Lock files/regions, divide work                      |
+| **Communication** | None — each agent works blind        | Messages, channels, broadcasts                       |
+| **State sharing** | Duplicate work, missed context       | Shared KV store with atomic CAS                      |
+| **Visibility**    | No idea what's happening             | Real-time dashboard + activity feed shows everything |
 
 **agent-comm** gives them a shared communication layer:
 
-- Agents **register** with a name and capabilities so others can discover them
+- Agents **register** with a name, capabilities, and skills so others can discover them
+- They **discover** each other by skill or tag for dynamic task routing
 - They exchange **messages** (direct, broadcast, or channel-based) to coordinate
 - They **react** to messages for lightweight signaling ("+1", "done", "blocked")
 - They share **state** (a key-value store with atomic CAS) for locks, flags, and progress
-- A **web dashboard** shows everything in real time
+- They log **activity events** (commits, test results, file edits) to a shared feed
+- A **web dashboard** shows everything in real time, including an Activity Feed tab
 
 It works with any agent that supports [MCP](https://modelcontextprotocol.io/) (stdio transport) or can make HTTP requests (REST API).
 
@@ -104,18 +106,19 @@ npm run setup
 
 Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and configures permissions.
 
-## MCP tools (33)
+## MCP tools (36)
 
 ### Agent management
 
-| Tool               | Description                                    |
-| ------------------ | ---------------------------------------------- |
-| `comm_register`    | Register with name, capabilities, and metadata |
-| `comm_list_agents` | List agents (filter by status/capability)      |
-| `comm_whoami`      | Return this agent's identity                   |
-| `comm_heartbeat`   | Keep agent online (optionally set status text) |
-| `comm_unregister`  | Go offline                                     |
-| `comm_set_status`  | Set status text (e.g. "working on X")          |
+| Tool               | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `comm_register`    | Register with name, capabilities, metadata, and skills |
+| `comm_list_agents` | List agents (filter by status/capability)              |
+| `comm_discover`    | Find agents by skill ID or tag                         |
+| `comm_whoami`      | Return this agent's identity                           |
+| `comm_heartbeat`   | Keep agent online (optionally set status text)         |
+| `comm_unregister`  | Go offline                                             |
+| `comm_set_status`  | Set status text (e.g. "working on X")                  |
 
 ### Messaging
 
@@ -159,6 +162,13 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 | `comm_state_delete` | Delete an entry                                      |
 | `comm_state_cas`    | Atomic compare-and-swap (for locks, counters, flags) |
 
+### Activity feed
+
+| Tool                | Description                                                 |
+| ------------------- | ----------------------------------------------------------- |
+| `comm_log_activity` | Log a structured event (commit, test_pass, file_edit, etc.) |
+| `comm_feed`         | Query the activity feed with optional filters               |
+
 ## REST API
 
 All endpoints return JSON. CORS enabled. See [full API reference](docs/API.md) for details.
@@ -177,6 +187,7 @@ GET  /api/messages/:id/thread             Get thread
 GET  /api/search?q=keyword                Full-text search (?limit=20&channel=&from=)
 GET  /api/state                           List state entries (?namespace=&prefix=)
 GET  /api/state/:namespace/:key           Get state entry
+GET  /api/feed                              Activity feed events (?agent=&type=&since=&limit=50)
 GET  /api/overview                        Full snapshot (agents, channels, messages, state)
 GET  /api/export                          Full database export as JSON
 
@@ -207,7 +218,7 @@ comm_heartbeat({ "status_text": null })
 comm_heartbeat({})
 ```
 
-**Claude Code agents** get automatic heartbeats and status via hooks (see [Setup docs](docs/SETUP.md)). **Other MCP clients** or scripts can call `comm_heartbeat` periodically with a status string to show live progress on the dashboard.
+**Claude Code agents** get automatic heartbeats and status via hooks (see [Setup docs](docs/SETUP.md)). **Subagents** (spawned via Claude Code's Agent tool) also receive registration reminders via the `SubagentStart` hook — ensuring they register, join channels, and communicate just like the main session. **Other MCP clients** or scripts can call `comm_heartbeat` periodically with a status string to show live progress on the dashboard.
 
 The REST endpoint `GET /api/agents/:id/heartbeat` returns agent liveness info (status, heartbeat age in ms/s, status text) for external monitoring.
 

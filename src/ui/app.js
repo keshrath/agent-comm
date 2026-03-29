@@ -18,7 +18,15 @@
     morphdom(el, wrap, { childrenOnly: true });
   }
 
-  var state = { agents: [], channels: [], messages: [], state: [], messageCount: 0, reactions: {} };
+  var state = {
+    agents: [],
+    channels: [],
+    messages: [],
+    state: [],
+    messageCount: 0,
+    reactions: {},
+    feed: [],
+  };
   var agentNameCache = {}; // id → name, survives agent purges
   var ws = null;
   var reconnectTimer = null;
@@ -104,6 +112,8 @@
     fp += '|' + (data.channels || []).length;
     fp += '|' + (data.state || []).length;
     fp += '|' + JSON.stringify(data.reactions || {});
+    fp += '|' + (data.feed || []).length;
+    if ((data.feed || []).length > 0) fp += ':f' + data.feed[0].id;
     return fp;
   }
 
@@ -130,6 +140,7 @@
     state = data;
     state.messageCount = data.messageCount || data.messages.length;
     state.reactions = data.reactions || {};
+    state.feed = data.feed || [];
     if (data.version) {
       document.getElementById('version').textContent = 'v' + data.version;
     }
@@ -398,6 +409,7 @@
     renderMessages();
     renderChannels();
     renderState();
+    renderFeed();
     updateNavBadges();
   }
 
@@ -525,6 +537,27 @@
         })
         .join('') +
       '</div>' +
+      (function () {
+        var skills = a.skills || [];
+        if (skills.length === 0) return '';
+        return (
+          '<div style="margin-top:4px">' +
+          '<span class="section-label" style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim)">Skills</span>' +
+          skills
+            .map(function (s) {
+              var tags = (s.tags || []).join(', ');
+              return (
+                '<span class="capability-tag" style="background:var(--accent-dim);color:var(--accent)" title="' +
+                escAttr(tags) +
+                '">' +
+                esc(s.name) +
+                '</span>'
+              );
+            })
+            .join('') +
+          '</div>'
+        );
+      })() +
       '<div class="card-action">View messages &rarr;</div>'
     );
   }
@@ -1052,6 +1085,96 @@
     );
   }
 
+  var FEED_TYPE_ICONS = {
+    commit: 'commit',
+    test_pass: 'check_circle',
+    test_fail: 'cancel',
+    file_edit: 'edit_document',
+    task_complete: 'task_alt',
+    error: 'error',
+    custom: 'extension',
+    register: 'person_add',
+    message: 'chat_bubble',
+    state_change: 'sync_alt',
+  };
+
+  var FEED_TYPE_COLORS = {
+    commit: 'var(--purple, #7c3aed)',
+    test_pass: 'var(--green, #22c55e)',
+    test_fail: 'var(--red, #ef4444)',
+    file_edit: 'var(--accent, #5d8da8)',
+    task_complete: 'var(--green, #22c55e)',
+    error: 'var(--red, #ef4444)',
+    custom: 'var(--text-muted, #888)',
+    register: 'var(--accent, #5d8da8)',
+    message: 'var(--accent, #5d8da8)',
+    state_change: 'var(--yellow, #eab308)',
+  };
+
+  function renderFeed() {
+    var feed = state.feed || [];
+    var container = document.getElementById('feed-list');
+    if (!container) return;
+    var filterEl = document.getElementById('feed-type-filter');
+    var typeFilter = filterEl ? filterEl.value : '';
+
+    var filtered = feed;
+    if (typeFilter) {
+      filtered = feed.filter(function (e) {
+        return e.type === typeFilter;
+      });
+    }
+
+    if (filtered.length === 0) {
+      morph(
+        container,
+        '<div class="empty-state">' +
+          '<span class="material-symbols-outlined empty-state-icon">rss_feed</span>' +
+          (typeFilter ? 'No events of type "' + esc(typeFilter) + '"' : 'No activity events yet') +
+          '<div class="empty-state-hint">Events appear when agents log activities</div>' +
+          '</div>',
+      );
+      return;
+    }
+
+    morph(
+      container,
+      filtered
+        .map(function (e) {
+          var icon = FEED_TYPE_ICONS[e.type] || 'circle';
+          var color = FEED_TYPE_COLORS[e.type] || 'var(--text-muted)';
+          var agentName = e.agent_id ? resolveAgentName(e.agent_id) : 'system';
+          return (
+            '<div class="feed-item">' +
+            '<div class="feed-icon" style="color:' +
+            color +
+            '"><span class="material-symbols-outlined">' +
+            icon +
+            '</span></div>' +
+            '<div class="feed-content">' +
+            '<div class="feed-header">' +
+            '<span class="feed-type" style="color:' +
+            color +
+            '">' +
+            esc(e.type) +
+            '</span>' +
+            '<span class="feed-agent">' +
+            esc(agentName) +
+            '</span>' +
+            '<span class="feed-time">' +
+            timeAgo(e.created_at) +
+            '</span>' +
+            '</div>' +
+            (e.target ? '<div class="feed-target">' + esc(e.target) + '</div>' : '') +
+            (e.preview ? '<div class="feed-preview">' + esc(e.preview) + '</div>' : '') +
+            '</div>' +
+            '</div>'
+          );
+        })
+        .join(''),
+    );
+  }
+
   // -----------------------------------------------------------------------
   // Nav badges
   // -----------------------------------------------------------------------
@@ -1067,6 +1190,7 @@
     setBadge('tab-messages', state.messageCount || (state.messages || []).length);
     setBadge('tab-channels', channels.length);
     setBadge('tab-state', stateEntries.length);
+    setBadge('tab-feed', (state.feed || []).length);
   }
 
   function setBadge(tabId, count) {
@@ -1299,6 +1423,11 @@
 
   document.getElementById('msg-search').addEventListener('input', triggerSearch);
   document.getElementById('state-filter').addEventListener('input', renderState);
+
+  var feedTypeFilter = document.getElementById('feed-type-filter');
+  if (feedTypeFilter) {
+    feedTypeFilter.addEventListener('change', renderFeed);
+  }
 
   var clearMsgsBtn = document.getElementById('msg-clear');
   if (clearMsgsBtn) {

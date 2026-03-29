@@ -8,7 +8,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Db } from '../storage/database.js';
 import type { EventBus } from './events.js';
-import type { Agent, AgentCreateInput, AgentStatus } from '../types.js';
+import type { Agent, AgentCreateInput, AgentStatus, Skill } from '../types.js';
 import { ConflictError, NotFoundError, ValidationError } from '../types.js';
 
 const STALE_THRESHOLD_SECONDS = 90;
@@ -26,6 +26,7 @@ interface AgentRow {
   status_text: string | null;
   last_heartbeat: string;
   registered_at: string;
+  skills: string;
 }
 
 function rowToAgent(row: AgentRow): Agent {
@@ -38,6 +39,7 @@ function rowToAgent(row: AgentRow): Agent {
     status_text: row.status_text,
     last_heartbeat: row.last_heartbeat,
     registered_at: row.registered_at,
+    skills: JSON.parse(row.skills || '[]') as Skill[],
   };
 }
 
@@ -78,10 +80,11 @@ export class AgentService {
     if (existing) {
       this.db.run(
         `UPDATE agents SET status = 'online', last_heartbeat = datetime('now'),
-         capabilities = ?, metadata = ? WHERE id = ?`,
+         capabilities = ?, metadata = ?, skills = ? WHERE id = ?`,
         [
           JSON.stringify(input.capabilities ?? []),
           JSON.stringify(input.metadata ?? {}),
+          JSON.stringify(input.skills ?? []),
           existing.id,
         ],
       );
@@ -91,12 +94,16 @@ export class AgentService {
     }
 
     const id = uuidv4();
-    this.db.run(`INSERT INTO agents (id, name, capabilities, metadata) VALUES (?, ?, ?, ?)`, [
-      id,
-      name,
-      JSON.stringify(input.capabilities ?? []),
-      JSON.stringify(input.metadata ?? {}),
-    ]);
+    this.db.run(
+      `INSERT INTO agents (id, name, capabilities, metadata, skills) VALUES (?, ?, ?, ?, ?)`,
+      [
+        id,
+        name,
+        JSON.stringify(input.capabilities ?? []),
+        JSON.stringify(input.metadata ?? {}),
+        JSON.stringify(input.skills ?? []),
+      ],
+    );
 
     const agent = this.getById(id)!;
     this.events.emit('agent:registered', { agent });
@@ -210,6 +217,32 @@ export class AgentService {
     const result = this.db.run(`UPDATE agents SET status_text = ? WHERE id = ?`, [text, agentId]);
     if (result.changes === 0) throw new NotFoundError('Agent', agentId);
     this.events.emit('agent:updated', { agentId, status_text: text });
+  }
+
+  discover(options: { skill?: string; tag?: string } = {}): Agent[] {
+    const agents = this.list({ includeOffline: false });
+    if (!options.skill && !options.tag) return agents;
+
+    return agents.filter((a) => {
+      const skills = a.skills || [];
+      if (options.skill) {
+        const skillLower = options.skill.toLowerCase();
+        if (
+          skills.some(
+            (s) => s.id.toLowerCase() === skillLower || s.name.toLowerCase().includes(skillLower),
+          )
+        ) {
+          return true;
+        }
+      }
+      if (options.tag) {
+        const tagLower = options.tag.toLowerCase();
+        if (skills.some((s) => s.tags.some((t) => t.toLowerCase().includes(tagLower)))) {
+          return true;
+        }
+      }
+      return false;
+    });
   }
 
   unregister(agentId: string): void {

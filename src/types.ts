@@ -17,12 +17,14 @@ export interface Agent {
   readonly status_text: string | null;
   readonly last_heartbeat: string;
   readonly registered_at: string;
+  readonly skills: readonly Skill[];
 }
 
 export interface AgentCreateInput {
   name: string;
   capabilities?: string[];
   metadata?: Record<string, unknown>;
+  skills?: Skill[];
 }
 
 // ---------------------------------------------------------------------------
@@ -179,4 +181,39 @@ export interface ToolDefinition {
     properties: Record<string, unknown>;
     required?: string[];
   };
+}
+
+// ---------------------------------------------------------------------------
+// Activity Feed
+// ---------------------------------------------------------------------------
+
+export type FeedEventType =
+  | 'commit'
+  | 'test_pass'
+  | 'test_fail'
+  | 'file_edit'
+  | 'task_complete'
+  | 'error'
+  | 'custom'
+  | 'register'
+  | 'message'
+  | 'state_change';
+
+export interface FeedEvent {
+  readonly id: number;
+  readonly agent_id: string | null;
+  readonly type: string;
+  readonly target: string | null;
+  readonly preview: string | null;
+  readonly created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Skills
+// ---------------------------------------------------------------------------
+
+export interface Skill {
+  readonly id: string;
+  readonly name: string;
+  readonly tags: string[];
 }

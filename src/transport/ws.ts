@@ -139,6 +139,7 @@ function getFingerprint(ctx: AppContext): string {
        || ':' || COALESCE((SELECT COUNT(*) FROM state), 0)
        || ':' || COALESCE((SELECT MAX(rowid) FROM state), 0)
        || ':' || COALESCE((SELECT COUNT(*) FROM message_reactions), 0)
+       || ':' || COALESCE((SELECT MAX(id) FROM feed_events), 0)
      AS fp`,
   );
   return row?.fp ?? '';
@@ -165,6 +166,7 @@ function sendFullState(ws: WebSocket, ctx: AppContext): void {
         messageCount: ctx.messages.count(),
         state: ctx.state.list(),
         reactions,
+        feed: ctx.feed.recent(30),
       }),
     );
   } catch {

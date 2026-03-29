@@ -6,7 +6,7 @@ Layered architecture with explicit dependency injection (no global state):
 
 ```
 src/
-  domain/     agents, channels, messages, state, reactions, cleanup, rate-limit, events
+  domain/     agents, channels, messages, state, reactions, feed, cleanup, rate-limit, events
   storage/    SQLite (better-sqlite3, WAL mode)
   transport/  REST (node:http), WebSocket (ws), MCP (stdio)
   ui/         Vanilla JS dashboard (no build step for UI)
@@ -49,6 +49,6 @@ npm run dev        # watch mode (tsc + nodemon)
 
 ## Key APIs
 
-- **REST**: `GET /health`, `GET /api/agents`, `GET /api/messages`, `GET /api/channels`, `GET /api/state`, `POST /api/cleanup/stale`, `POST /api/cleanup/full`
+- **REST**: `GET /health`, `GET /api/agents`, `GET /api/messages`, `GET /api/channels`, `GET /api/state`, `GET /api/feed`, `POST /api/cleanup/stale`, `POST /api/cleanup/full`
 - **WebSocket**: Full state on connect, incremental events streamed, `refresh` request supported
-- **MCP**: 33 tools (`comm_register`, `comm_send`, `comm_channel_*`, `comm_state_*`, etc.)
+- **MCP**: 36 tools (`comm_register`, `comm_discover`, `comm_send`, `comm_channel_*`, `comm_state_*`, `comm_log_activity`, `comm_feed`, etc.)
