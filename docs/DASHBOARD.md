@@ -13,6 +13,18 @@ Auto-starts at `http://localhost:3421` on first MCP connection, or run standalon
 | **State**    | Key-value table with namespace/key filtering                                        |
 | **Activity** | Structured event feed — commits, test results, file edits, errors across all agents |
 
+### Agents with Skills
+
+![Agents with Skills](screenshots/agents-skills.png)
+
+Agent cards display capability tags, status text, heartbeat age, and message counts. Click any card to filter messages by that agent.
+
+### Activity Feed
+
+![Activity Feed](screenshots/activity-feed.png)
+
+Unified timeline of structured events across all agents. Filter by event type (commit, test_pass, error, file_edit, task_complete, etc.).
+
 ## Features
 
 - Light + dark theme (persisted in localStorage)

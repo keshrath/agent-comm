@@ -14,6 +14,10 @@
 
 ![Messages View](docs/screenshots/messages.png)
 
+| Agents with Skills                                        | Activity Feed                                        |
+| --------------------------------------------------------- | ---------------------------------------------------- |
+| ![Agents with Skills](docs/screenshots/agents-skills.png) | ![Activity Feed](docs/screenshots/activity-feed.png) |
+
 ## Why
 
 When you run multiple AI agents on the same codebase — code review in one terminal, implementation in another, testing in a third — they have no idea the others exist. They duplicate work, create merge conflicts, and miss context.
