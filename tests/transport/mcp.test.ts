@@ -178,57 +178,6 @@ describe('MCP Tool Handler', () => {
     });
   });
 
-  describe('comm_handoff', () => {
-    it('sends a structured handoff message to the target agent', () => {
-      const h1 = createToolHandler(ctx);
-      const h2 = createToolHandler(ctx);
-      h1('comm_register', { name: 'hand-off-sender' });
-      h2('comm_register', { name: 'hand-off-receiver' });
-
-      const result = h1('comm_handoff', {
-        to: 'hand-off-receiver',
-        context: 'Please continue the auth implementation',
-      }) as {
-        handoff_message: { id: number; content: string };
-        from: string;
-        to: string;
-        thread_included: boolean;
-      };
-
-      expect(result.from).toBe('hand-off-sender');
-      expect(result.to).toBe('hand-off-receiver');
-      expect(result.thread_included).toBe(false);
-      expect(result.handoff_message.content).toContain('HANDOFF');
-      expect(result.handoff_message.content).toContain('auth implementation');
-    });
-
-    it('includes thread history when thread_id is provided', () => {
-      const h1 = createToolHandler(ctx);
-      const h2 = createToolHandler(ctx);
-      h1('comm_register', { name: 'ho-sender' });
-      h2('comm_register', { name: 'ho-receiver' });
-
-      const original = h1('comm_send', { to: 'ho-receiver', content: 'Starting work on auth' }) as {
-        id: number;
-      };
-      h2('comm_send', { reply_to: original.id, content: 'Got it, will help' });
-
-      const result = h1('comm_handoff', {
-        to: 'ho-receiver',
-        thread_id: original.id,
-        context: 'Take over',
-      }) as { handoff_message: { content: string }; thread_included: boolean };
-
-      expect(result.thread_included).toBe(true);
-      expect(result.handoff_message.content).toContain('Thread history');
-    });
-
-    it('requires registration', () => {
-      const h = createToolHandler(ctx);
-      expect(() => h('comm_handoff', { to: 'someone' })).toThrow('Not registered');
-    });
-  });
-
   describe('error handling', () => {
     it('throws for unknown tools', () => {
       expect(() => handle('comm_nonexistent', {})).toThrow('Unknown tool');

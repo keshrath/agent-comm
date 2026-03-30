@@ -4,7 +4,6 @@
 // Maps MCP tool calls to domain services. Each tool is a thin adapter —
 // validation lives in the domain layer, not here.
 //
-// Consolidated from 38 tools to 12 tools in v1.3.0.
 // =============================================================================
 
 import type { AppContext } from '../context.js';
@@ -27,12 +26,7 @@ const ACTION_REQUIRED = {
   description: 'Action to perform (see enum for options)',
 } as const;
 
-// ---------------------------------------------------------------------------
-// Tool definitions (12 consolidated tools)
-// ---------------------------------------------------------------------------
-
 export const tools: ToolDefinition[] = [
-  // 1. comm_register — keep as-is
   {
     name: 'comm_register',
     description: 'Register this agent with the communication hub. Returns the agent identity.',
@@ -67,7 +61,6 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 2. comm_agents — merged list_agents, discover, whoami, heartbeat, set_status, unregister
   {
     name: 'comm_agents',
     description:
@@ -79,7 +72,6 @@ export const tools: ToolDefinition[] = [
           ...ACTION_REQUIRED,
           enum: ['list', 'discover', 'whoami', 'heartbeat', 'status', 'unregister'],
         },
-        // list
         status: {
           type: 'string',
           enum: ['online', 'idle', 'offline'],
@@ -95,13 +87,11 @@ export const tools: ToolDefinition[] = [
           description:
             '[list] When provided, only returns agents alive but inactive for this many minutes (1-1440)',
         },
-        // discover
         skill: { type: 'string', description: '[discover] Skill ID or name to search for' },
         tag: {
           type: 'string',
           description: '[discover] Tag to search for across all agent skills',
         },
-        // heartbeat + status
         status_text: {
           type: 'string',
           description: '[heartbeat/status] Status text (max 256 chars, omit or null to clear)',
@@ -111,7 +101,6 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 3. comm_send — merged send, broadcast, channel_send, reply, forward
   {
     name: 'comm_send',
     description:
@@ -149,7 +138,6 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 4. comm_inbox — with optional thread_id for thread retrieval
   {
     name: 'comm_inbox',
     description:
@@ -168,7 +156,6 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 5. comm_channel — merged all channel tools except channel_send (in comm_send)
   {
     name: 'comm_channel',
     description:
@@ -201,7 +188,6 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 7. comm_state — merged all state tools
   {
     name: 'comm_state',
     description:
@@ -227,57 +213,6 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  // 8. comm_branch
-  {
-    name: 'comm_branch',
-    description:
-      'Conversation branching. Without message_id: list all branches. With message_id: fork a conversation at that message, creating an isolated history branch.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: {
-          type: 'number',
-          description:
-            'When provided, creates a branch forking from this message. When omitted, lists all branches.',
-        },
-        name: {
-          type: 'string',
-          description: 'Branch name (1-128 chars, only used when creating a branch)',
-        },
-      },
-    },
-  },
-
-  // 11. comm_handoff — keep as-is
-  {
-    name: 'comm_handoff',
-    description:
-      'Transfer conversation ownership to another agent with full context. Sends a structured handoff message with thread history and optional context.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        to: {
-          type: 'string',
-          description: 'Target agent name or ID to hand off to',
-        },
-        thread_id: {
-          type: 'number',
-          description: 'Thread ID to include history from (optional)',
-        },
-        context: {
-          type: 'string',
-          description: 'Additional context or instructions for the receiving agent',
-        },
-        channel: {
-          type: 'string',
-          description: 'Channel to post the handoff in (optional, otherwise sent as DM)',
-        },
-      },
-      required: ['to'],
-    },
-  },
-
-  // 12. comm_search — keep as-is
   {
     name: 'comm_search',
     description: 'Full-text search across all messages.',

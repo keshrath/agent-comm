@@ -1,12 +1,7 @@
 // =============================================================================
 // agent-comm — MCP tool handler dispatch table
 //
-// Each handler is extracted from the former switch statement in mcp.ts.
 // Signature: (ctx, args, agent) => result
-// Where `agent` is a helper object providing access to the current agent
-// state and common resolution utilities.
-//
-// Consolidated from 38 handlers to 12 in v1.3.0.
 // =============================================================================
 
 import type { AppContext } from '../context.js';
@@ -56,9 +51,6 @@ export type ToolHandlerFn = (
 ) => unknown;
 
 export const toolHandlers: Record<string, ToolHandlerFn> = {
-  // =========================================================================
-  // 1. comm_register — keep as-is
-  // =========================================================================
   comm_register(ctx, args, agent) {
     const rawCaps = args.capabilities;
     if (rawCaps !== undefined && rawCaps !== null) {
@@ -115,9 +107,6 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     return registered;
   },
 
-  // =========================================================================
-  // 2. comm_agents — merged list_agents, discover, whoami, heartbeat, status, unregister
-  // =========================================================================
   comm_agents(ctx, args, agent) {
     const action = requireString(args, 'action');
 
@@ -182,9 +171,6 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     }
   },
 
-  // =========================================================================
-  // 3. comm_send — merged send, broadcast, channel_send, reply, forward
-  // =========================================================================
   comm_send(ctx, args, agent) {
     const self = agent.require();
     ctx.rateLimiter.check(self.id);
@@ -281,9 +267,6 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     );
   },
 
-  // =========================================================================
-  // 4. comm_inbox — with optional thread_id
-  // =========================================================================
   comm_inbox(ctx, args, agent) {
     const self = agent.require();
     const threadId = optNumber(args, 'thread_id');
@@ -296,9 +279,6 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     });
   },
 
-  // =========================================================================
-  // 5. comm_channel — merged all channel tools (except send, which is in comm_send)
-  // =========================================================================
   comm_channel(ctx, args, agent) {
     const action = requireString(args, 'action');
 
@@ -369,9 +349,6 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     }
   },
 
-  // =========================================================================
-  // 7. comm_state — merged all state tools
-  // =========================================================================
   comm_state(ctx, args, agent) {
     const action = requireString(args, 'action');
 
@@ -428,92 +405,6 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     }
   },
 
-  // =========================================================================
-  // 8. comm_branch — keep as-is (already consolidated)
-  // =========================================================================
-  comm_branch(ctx, args, agent) {
-    const messageId = optNumber(args, 'message_id');
-    // Without message_id: list branches
-    if (messageId === undefined) {
-      agent.require();
-      return ctx.branches.list();
-    }
-    // With message_id: create a branch
-    const self = agent.require();
-    const branch = ctx.branches.create(messageId, self.id, optString(args, 'name'));
-    ctx.agents.touchActivity(self.id);
-    ctx.feed.logInternal(
-      self.id,
-      'branch',
-      branch.name ?? `branch-${branch.id}`,
-      `Branched from message #${branch.parent_message_id}`,
-    );
-    return branch;
-  },
-
-  // =========================================================================
-  // 11. comm_handoff — keep as-is
-  // =========================================================================
-  comm_handoff(ctx, args, agent) {
-    const self = agent.require();
-    ctx.rateLimiter.check(self.id);
-    const target = agent.resolve(requireString(args, 'to'));
-    const threadId = optNumber(args, 'thread_id');
-    const context = optString(args, 'context') ?? '';
-    const channelName = optString(args, 'channel');
-
-    let handoffContent = `--- HANDOFF from ${self.name} to ${target.name} ---\n\n`;
-
-    if (context) {
-      handoffContent += `**Context:** ${context}\n\n`;
-    }
-
-    if (threadId) {
-      const threadMessages = ctx.messages.thread(threadId);
-      if (threadMessages.length > 0) {
-        handoffContent += `**Thread history** (${threadMessages.length} messages):\n\n`;
-        for (const tm of threadMessages.slice(-20)) {
-          const fromName = ctx.agents.getById(tm.from_agent)?.name ?? tm.from_agent;
-          const preview = tm.content.substring(0, 200);
-          handoffContent += `> **${fromName}**: ${preview}${tm.content.length > 200 ? '...' : ''}\n>\n`;
-        }
-      }
-    }
-
-    handoffContent += `\n--- End of handoff ---`;
-
-    const channelId = channelName ? agent.resolveChannel(channelName) : undefined;
-    if (channelId) {
-      agent.requireChannelMember(channelId, self.id);
-    }
-
-    const handoffMsg = ctx.messages.send(self.id, {
-      to: channelId ? undefined : target.id,
-      channel: channelId,
-      content: handoffContent,
-      importance: 'high',
-      thread_id: threadId,
-    });
-
-    ctx.agents.touchActivity(self.id);
-    ctx.feed.logInternal(
-      self.id,
-      'handoff',
-      target.name,
-      `Handoff to ${target.name}` + (context ? `: ${context.substring(0, 80)}` : ''),
-    );
-
-    return {
-      handoff_message: handoffMsg,
-      from: self.name,
-      to: target.name,
-      thread_included: !!threadId,
-    };
-  },
-
-  // =========================================================================
-  // 12. comm_search — keep as-is
-  // =========================================================================
   comm_search(ctx, args, agent) {
     agent.require();
     const fromAgent = optString(args, 'from');

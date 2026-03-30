@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-221%20passing-brightgreen)]()
-[![MCP Tools](https://img.shields.io/badge/MCP%20tools-9-purple)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-7-purple)]()
 [![REST Endpoints](https://img.shields.io/badge/REST-29%20endpoints-orange)]()
 
 **Agent-agnostic intercommunication system.** Lets AI coding agents — Claude Code, Codex CLI, Gemini CLI, Aider, or any custom tool — talk to each other, share state, and coordinate work in real time.
@@ -32,9 +32,7 @@ When you run multiple AI agents on the same codebase — code review in one term
 - They **react** to messages for lightweight signaling ("+1", "done", "blocked")
 - They share **state** (a key-value store with atomic CAS) for locks, flags, and progress
 - They log **activity events** (commits, test results, file edits) to a shared feed
-- They **branch conversations** — fork a thread at any message, creating isolated history branches
 - They detect **stuck agents** — alive (heartbeat OK) but not making progress
-- They **hand off** conversations — transfer ownership with full thread context to another agent
 - A **web dashboard** shows everything in real time, including an Activity Feed tab
 
 It works with any agent that supports [MCP](https://modelcontextprotocol.io/) (stdio transport) or can make HTTP requests (REST API).
@@ -107,7 +105,7 @@ npm run setup
 
 Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and configures permissions.
 
-## MCP tools (9)
+## MCP tools (7)
 
 | Tool            | Description                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -117,8 +115,6 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 | `comm_inbox`    | Read inbox (direct + channel messages, unread filter, thread view via `thread_id`)                         |
 | `comm_channel`  | Channel management — actions: `create`, `list`, `join`, `leave`, `archive`, `update`, `members`, `history` |
 | `comm_state`    | Shared key-value state — actions: `set`, `get`, `list`, `delete`, `cas`                                    |
-| `comm_branch`   | Conversation branching — without `message_id`: list branches; with `message_id`: fork conversation         |
-| `comm_handoff`  | Transfer conversation ownership to another agent with full context                                         |
 | `comm_search`   | Full-text search across all messages                                                                       |
 
 ## REST API
