@@ -285,6 +285,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     switch (action) {
       case 'create': {
         const self = agent.require();
+        ctx.rateLimiter.check(self.id);
         return ctx.channels.create(
           requireString(args, 'channel'),
           self.id,
@@ -299,6 +300,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
 
       case 'join': {
         const self = agent.require();
+        ctx.rateLimiter.check(self.id);
         const ch = requireString(args, 'channel');
         const channelId = agent.resolveChannel(ch);
         ctx.channels.join(channelId, self.id);
@@ -317,6 +319,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
 
       case 'archive': {
         const self = agent.require();
+        ctx.rateLimiter.check(self.id);
         const channelId = agent.resolveChannel(requireString(args, 'channel'));
         ctx.channels.archive(channelId, self.id);
         return { success: true, channel: requireString(args, 'channel') };
@@ -355,6 +358,7 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     switch (action) {
       case 'set': {
         const self = agent.require();
+        ctx.rateLimiter.check(self.id);
         const entry = ctx.state.set(
           optString(args, 'namespace') ?? 'default',
           requireString(args, 'key'),
@@ -382,13 +386,15 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       }
 
       case 'delete': {
-        agent.require();
+        const self = agent.require();
+        ctx.rateLimiter.check(self.id);
         const ns = optString(args, 'namespace') ?? 'default';
         return { deleted: ctx.state.delete(ns, requireString(args, 'key')) };
       }
 
       case 'cas': {
         const self = agent.require();
+        ctx.rateLimiter.check(self.id);
         const ns = optString(args, 'namespace') ?? 'default';
         const swapped = ctx.state.compareAndSwap(
           ns,

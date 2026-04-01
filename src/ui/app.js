@@ -138,14 +138,20 @@
       );
     }
 
-    var fp = quickFingerprint(data);
+    if (data.delta) {
+      Object.keys(data).forEach(function (k) {
+        if (k !== 'type' && k !== 'delta') AC.state[k] = data[k];
+      });
+    } else {
+      AC.state = data;
+    }
+    AC.state.messageCount = AC.state.messageCount || (AC.state.messages || []).length;
+    if (!AC.state.feed) AC.state.feed = [];
+    if (!AC.state.branches) AC.state.branches = [];
+
+    var fp = quickFingerprint(AC.state);
     if (fp === lastStateFingerprint) return;
     lastStateFingerprint = fp;
-
-    AC.state = data;
-    AC.state.messageCount = data.messageCount || data.messages.length;
-    AC.state.feed = data.feed || [];
-    AC.state.branches = data.branches || [];
     if (data.version) {
       document.getElementById('version').textContent = 'v' + data.version;
     }

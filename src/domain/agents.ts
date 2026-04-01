@@ -228,28 +228,48 @@ export class AgentService {
   }
 
   discover(options: { skill?: string; tag?: string } = {}): Agent[] {
-    const agents = this.list({ includeOffline: false });
-    if (!options.skill && !options.tag) return agents;
+    if (!options.skill && !options.tag) {
+      return this.list({ includeOffline: false });
+    }
 
-    return agents.filter((a) => {
+    let sql = `SELECT * FROM agents WHERE status != 'offline'`;
+    const params: unknown[] = [];
+
+    if (options.skill) {
+      sql += ` AND (LOWER(skills) LIKE ? ESCAPE '\\')`;
+      const skillEscaped = options.skill.toLowerCase().replace(/[\\%_]/g, '\\$&');
+      params.push(`%${skillEscaped}%`);
+    }
+
+    if (options.tag) {
+      sql += ` AND (LOWER(skills) LIKE ? ESCAPE '\\')`;
+      const tagEscaped = options.tag.toLowerCase().replace(/[\\%_]/g, '\\$&');
+      params.push(`%${tagEscaped}%`);
+    }
+
+    sql += ` ORDER BY registered_at DESC`;
+    const rows = this.db.queryAll<AgentRow>(sql, params);
+    const candidates = rows.map(rowToAgent);
+
+    return candidates.filter((a) => {
       const skills = a.skills || [];
       if (options.skill) {
         const skillLower = options.skill.toLowerCase();
         if (
-          skills.some(
+          !skills.some(
             (s) => s.id.toLowerCase() === skillLower || s.name.toLowerCase().includes(skillLower),
           )
         ) {
-          return true;
+          return false;
         }
       }
       if (options.tag) {
         const tagLower = options.tag.toLowerCase();
-        if (skills.some((s) => s.tags.some((t) => t.toLowerCase().includes(tagLower)))) {
-          return true;
+        if (!skills.some((s) => s.tags.some((t) => t.toLowerCase().includes(tagLower)))) {
+          return false;
         }
       }
-      return false;
+      return true;
     });
   }
 

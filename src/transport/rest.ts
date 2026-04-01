@@ -302,47 +302,54 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     });
   }
 
-  route('POST', '/api/messages', async (req, res) => {
-    const body = await readBody(req);
-    const from = body.from as string | undefined;
+  /** Validate and send a message from body fields on behalf of a resolved sender. */
+  function processSendMessage(
+    res: ServerResponse,
+    body: Record<string, unknown>,
+    sender: { id: string; status: string; name: string },
+  ): void {
+    if (sender.status === 'offline') {
+      json(res, { error: `Agent "${sender.name}" is offline. Register via MCP first.` }, 403);
+      return;
+    }
+
     const to = body.to as string | undefined;
     const channel = body.channel as string | undefined;
     const content = body.content as string | undefined;
 
-    if (!from || typeof from !== 'string')
-      return json(res, { error: '"from" (agent name or ID) is required' }, 400);
-    if (!content || typeof content !== 'string')
-      return json(res, { error: '"content" is required' }, 400);
-
-    const sender = ctx.agents.resolveByNameOrId(from);
-    if (!sender) return json(res, { error: `Agent not found: ${from}` }, 404);
-
-    // Security: only allow sending as online/idle agents to reduce impersonation risk.
-    // The REST API is unauthenticated, so at minimum require the agent to be active.
-    if (sender.status === 'offline') {
-      return json(res, { error: `Agent "${from}" is offline. Register via MCP first.` }, 403);
+    if (!content || typeof content !== 'string') {
+      json(res, { error: '"content" is required' }, 400);
+      return;
     }
 
     const channelId = channel ? ctx.channels.getByName(channel)?.id : undefined;
-    if (channel && !channelId) return json(res, { error: `Channel not found: ${channel}` }, 404);
+    if (channel && !channelId) {
+      json(res, { error: `Channel not found: ${channel}` }, 404);
+      return;
+    }
 
     let toAgentId: string | undefined;
     if (to) {
       const target = ctx.agents.resolveByNameOrId(to);
-      if (!target) return json(res, { error: `Agent not found: ${to}` }, 404);
+      if (!target) {
+        json(res, { error: `Agent not found: ${to}` }, 404);
+        return;
+      }
       toAgentId = target.id;
     }
 
     const threadId = body.thread_id;
     if (threadId !== undefined && threadId !== null && typeof threadId !== 'number') {
-      return json(res, { error: '"thread_id" must be a number' }, 400);
+      json(res, { error: '"thread_id" must be a number' }, 400);
+      return;
     }
 
     const importance = body.importance;
     const VALID_IMPORTANCE = new Set(['low', 'normal', 'high', 'urgent']);
     if (importance !== undefined && importance !== null) {
       if (typeof importance !== 'string' || !VALID_IMPORTANCE.has(importance)) {
-        return json(res, { error: '"importance" must be one of: low, normal, high, urgent' }, 400);
+        json(res, { error: '"importance" must be one of: low, normal, high, urgent' }, 400);
+        return;
       }
     }
 
@@ -354,6 +361,26 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
       importance: importance as 'low' | 'normal' | 'high' | 'urgent' | undefined,
     });
     json(res, msg, 201);
+  }
+
+  route('POST', '/api/agents/:id/messages', async (req, res, params) => {
+    const sender = ctx.agents.resolveByNameOrId(params.id);
+    if (!sender) return json(res, { error: `Agent not found: ${params.id}` }, 404);
+    const body = await readBody(req);
+    processSendMessage(res, body, sender);
+  });
+
+  route('POST', '/api/messages', async (req, res) => {
+    const body = await readBody(req);
+    const from = body.from as string | undefined;
+
+    if (!from || typeof from !== 'string')
+      return json(res, { error: '"from" (agent name or ID) is required' }, 400);
+
+    const sender = ctx.agents.resolveByNameOrId(from);
+    if (!sender) return json(res, { error: `Agent not found: ${from}` }, 404);
+
+    processSendMessage(res, body, sender);
   });
 
   route('POST', '/api/state/:namespace/:key', async (req, res, params) => {

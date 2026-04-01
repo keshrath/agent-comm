@@ -2,9 +2,8 @@
 // agent-comm — WebSocket transport
 //
 // Real-time state streaming to connected UI clients.
-// Full state sent on connect; DB fingerprint polled every 2s to detect
-// changes from any MCP process (each has its own in-memory EventBus,
-// so cross-process events require DB-level change detection).
+// Full state sent on connect; subsequent updates are delta-based —
+// each state category is fingerprinted and only changed categories are sent.
 // =============================================================================
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -37,8 +36,18 @@ export interface WebSocketHandle {
   close(): void;
 }
 
+interface CategoryFingerprints {
+  agents: string;
+  messages: string;
+  channels: string;
+  state: string;
+  feed: string;
+  branches: string;
+}
+
 interface ClientState {
   alive: boolean;
+  fingerprints: CategoryFingerprints | null;
 }
 
 export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHandle {
@@ -51,8 +60,8 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
       return;
     }
 
-    clients.set(ws, { alive: true });
-    sendFullState(ws, ctx);
+    clients.set(ws, { alive: true, fingerprints: null });
+    sendFullState(ws, ctx, clients);
 
     ws.on('pong', () => {
       const s = clients.get(ws);
@@ -81,7 +90,9 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
       const msg = parsed as { type: string };
 
       if (msg.type === 'refresh') {
-        sendFullState(ws, ctx);
+        const clientState = clients.get(ws);
+        if (clientState) clientState.fingerprints = null;
+        sendFullState(ws, ctx, clients);
       } else {
         const safeType = String(msg.type)
           .slice(0, 64)
@@ -108,20 +119,19 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
   }, PING_INTERVAL_MS);
   pingInterval.unref();
 
-  // Poll DB for changes from any MCP process. A lightweight fingerprint
-  // query covers all tables; on change we push a full state snapshot.
-  let lastFingerprint = '';
+  // Poll DB for changes. Per-category fingerprints allow delta updates —
+  // only categories whose fingerprint changed are included in the payload.
   const dbPollInterval = setInterval(() => {
     if (clients.size === 0) return;
     try {
-      const fp = getFingerprint(ctx);
-      if (fp !== lastFingerprint) {
-        lastFingerprint = fp;
-        for (const [ws] of clients) {
-          if (ws.readyState === WebSocket.OPEN) {
-            sendFullState(ws, ctx);
-          }
+      const currentFp = getCategoryFingerprints(ctx);
+      for (const [ws, clientState] of clients) {
+        if (ws.readyState !== WebSocket.OPEN) continue;
+        if (!clientState.fingerprints) {
+          sendFullState(ws, ctx, clients);
+          continue;
         }
+        sendDelta(ws, ctx, clientState, currentFp);
       }
     } catch (err) {
       process.stderr.write(
@@ -147,47 +157,168 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
   };
 }
 
-/** Cheap fingerprint across all dashboard-relevant tables. */
-function getFingerprint(ctx: AppContext): string {
-  const row = ctx.db.queryOne<{ fp: string }>(
+// ---------------------------------------------------------------------------
+// Per-category fingerprints
+// ---------------------------------------------------------------------------
+
+function getCategoryFingerprints(ctx: AppContext): CategoryFingerprints {
+  const row = ctx.db.queryOne<{
+    agents_fp: string;
+    messages_fp: string;
+    channels_fp: string;
+    state_fp: string;
+    feed_fp: string;
+    branches_fp: string;
+  }>(
     `SELECT
+       COALESCE((SELECT COUNT(*) FROM agents WHERE status != 'offline'), 0)
+         || ':' || COALESCE((SELECT MAX(registered_at) FROM agents), '')
+         || ':' || COALESCE((SELECT GROUP_CONCAT(status) FROM (SELECT status FROM agents WHERE status != 'offline' ORDER BY id)), '')
+       AS agents_fp,
        COALESCE((SELECT MAX(id) FROM messages), 0)
-       || ':' || COALESCE((SELECT COUNT(*) FROM agents WHERE status != 'offline'), 0)
-       || ':' || COALESCE((SELECT MAX(registered_at) FROM agents), '')
-       || ':' || COALESCE((SELECT COUNT(*) FROM channels), 0)
-       || ':' || COALESCE((SELECT COUNT(*) FROM state), 0)
-       || ':' || COALESCE((SELECT MAX(rowid) FROM state), 0)
-       || ':' || COALESCE((SELECT MAX(id) FROM feed_events), 0)
-       || ':' || COALESCE((SELECT COUNT(*) FROM thread_branches), 0)
-     AS fp`,
+         || ':' || COALESCE((SELECT COUNT(*) FROM messages), 0)
+       AS messages_fp,
+       COALESCE((SELECT COUNT(*) FROM channels), 0)
+         || ':' || COALESCE((SELECT MAX(created_at) FROM channels), '')
+         || ':' || COALESCE((SELECT COUNT(*) FROM channel_members), 0)
+       AS channels_fp,
+       COALESCE((SELECT COUNT(*) FROM state), 0)
+         || ':' || COALESCE((SELECT MAX(rowid) FROM state), 0)
+         || ':' || COALESCE((SELECT MAX(updated_at) FROM state), '')
+       AS state_fp,
+       COALESCE((SELECT MAX(id) FROM feed_events), 0)
+       AS feed_fp,
+       COALESCE((SELECT COUNT(*) FROM thread_branches), 0)
+         || ':' || COALESCE((SELECT MAX(id) FROM thread_branches), 0)
+       AS branches_fp`,
   );
-  return row?.fp ?? '';
+  return {
+    agents: row?.agents_fp ?? '',
+    messages: row?.messages_fp ?? '',
+    channels: row?.channels_fp ?? '',
+    state: row?.state_fp ?? '',
+    feed: row?.feed_fp ?? '',
+    branches: row?.branches_fp ?? '',
+  };
 }
 
-function sendFullState(ws: WebSocket, ctx: AppContext): void {
+// ---------------------------------------------------------------------------
+// State data fetchers
+// ---------------------------------------------------------------------------
+
+function getAgentsData(ctx: AppContext) {
+  return ctx.agents.list({ includeOffline: true });
+}
+
+function getMessagesData(ctx: AppContext) {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .replace('T', ' ')
+    .slice(0, 19);
+  const allMessages = ctx.messages.list({ limit: 50, since });
+  return allMessages.filter((m) => m.channel_id !== null || m.to_agent === null);
+}
+
+function getChannelsData(ctx: AppContext) {
+  return ctx.channels.list();
+}
+
+function getStateData(ctx: AppContext) {
+  return ctx.state.list();
+}
+
+function getFeedData(ctx: AppContext) {
+  return ctx.feed.recent(30);
+}
+
+function getBranchesData(ctx: AppContext) {
+  return ctx.branches.list();
+}
+
+// ---------------------------------------------------------------------------
+// Send helpers
+// ---------------------------------------------------------------------------
+
+function sendFullState(ws: WebSocket, ctx: AppContext, clients: Map<WebSocket, ClientState>): void {
   try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      .toISOString()
-      .replace('T', ' ')
-      .slice(0, 19);
-    const allMessages = ctx.messages.list({ limit: 50, since });
-    const publicMessages = allMessages.filter((m) => m.channel_id !== null || m.to_agent === null);
+    const fp = getCategoryFingerprints(ctx);
+    const clientState = clients.get(ws);
+    if (clientState) clientState.fingerprints = { ...fp };
+
     ws.send(
       JSON.stringify({
         type: 'state',
         version: pkg.version,
-        agents: ctx.agents.list({ includeOffline: true }),
-        channels: ctx.channels.list(),
-        messages: publicMessages,
+        agents: getAgentsData(ctx),
+        channels: getChannelsData(ctx),
+        messages: getMessagesData(ctx),
         messageCount: ctx.messages.count(),
-        state: ctx.state.list(),
-        feed: ctx.feed.recent(30),
-        branches: ctx.branches.list(),
+        state: getStateData(ctx),
+        feed: getFeedData(ctx),
+        branches: getBranchesData(ctx),
       }),
     );
   } catch (err) {
     process.stderr.write(
       '[agent-comm] WS send error: ' + (err instanceof Error ? err.message : String(err)) + '\n',
+    );
+  }
+}
+
+function sendDelta(
+  ws: WebSocket,
+  ctx: AppContext,
+  clientState: ClientState,
+  currentFp: CategoryFingerprints,
+): void {
+  const prevFp = clientState.fingerprints!;
+  const changed: Partial<Record<string, unknown>> = {};
+  let hasChanges = false;
+
+  if (prevFp.agents !== currentFp.agents) {
+    changed.agents = getAgentsData(ctx);
+    hasChanges = true;
+  }
+  if (prevFp.messages !== currentFp.messages) {
+    changed.messages = getMessagesData(ctx);
+    changed.messageCount = ctx.messages.count();
+    hasChanges = true;
+  }
+  if (prevFp.channels !== currentFp.channels) {
+    changed.channels = getChannelsData(ctx);
+    hasChanges = true;
+  }
+  if (prevFp.state !== currentFp.state) {
+    changed.state = getStateData(ctx);
+    hasChanges = true;
+  }
+  if (prevFp.feed !== currentFp.feed) {
+    changed.feed = getFeedData(ctx);
+    hasChanges = true;
+  }
+  if (prevFp.branches !== currentFp.branches) {
+    changed.branches = getBranchesData(ctx);
+    hasChanges = true;
+  }
+
+  if (!hasChanges) return;
+
+  clientState.fingerprints = { ...currentFp };
+
+  try {
+    ws.send(
+      JSON.stringify({
+        type: 'state',
+        version: pkg.version,
+        delta: true,
+        ...changed,
+      }),
+    );
+  } catch (err) {
+    process.stderr.write(
+      '[agent-comm] WS delta send error: ' +
+        (err instanceof Error ? err.message : String(err)) +
+        '\n',
     );
   }
 }

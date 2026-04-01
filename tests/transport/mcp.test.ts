@@ -282,7 +282,8 @@ describe('MCP Tool Handler', () => {
       h('comm_register', { name: 'ch-spammer' });
       h('comm_channel', { action: 'create', channel: 'spam-ch' });
 
-      for (let i = 0; i < 10; i++) {
+      // Channel create consumes 1 token, leaving 9 of the 10-token burst
+      for (let i = 0; i < 9; i++) {
         h('comm_send', { channel: 'spam-ch', content: `msg ${i}` });
       }
       expect(() => h('comm_send', { channel: 'spam-ch', content: 'overflow' })).toThrow(
