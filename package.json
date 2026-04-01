@@ -1,6 +1,6 @@
 {
   "name": "agent-comm",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Agent-agnostic intercommunication system — sessions, messaging, channels, shared state, and real-time events",
   "type": "module",
   "main": "dist/index.js",
@@ -81,6 +81,7 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
+  "mcpName": "io.github.keshrath/agent-comm",
   "license": "MIT",
   "repository": {
     "type": "git",
