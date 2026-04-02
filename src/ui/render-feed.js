@@ -93,7 +93,7 @@
       var url = '/api/feed?limit=' + FEED_PAGE_SIZE + '&offset=' + loadedCount;
       if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
 
-      fetch(url)
+      AC._fetch(url)
         .then(function (r) {
           return r.json();
         })

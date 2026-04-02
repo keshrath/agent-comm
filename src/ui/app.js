@@ -36,6 +36,16 @@
   };
   AC.agentNameCache = {}; // id -> name, survives agent purges
 
+  // -----------------------------------------------------------------------
+  // Plugin support — configurable fetch proxy and WebSocket URL
+  // -----------------------------------------------------------------------
+
+  AC._baseUrl = '';
+  AC._fetch = function (url, opts) {
+    return fetch(AC._baseUrl + url, opts);
+  };
+  AC._wsUrl = null;
+
   var ws = null;
   var reconnectTimer = null;
   var loaded = false;
@@ -68,8 +78,9 @@
   // -----------------------------------------------------------------------
 
   function connect() {
+    var host = AC._wsUrl || location.host;
     var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(protocol + '//' + location.host);
+    ws = new WebSocket(protocol + '//' + host);
 
     ws.onopen = function () {
       setConnectionStatus('connected', 'Connected');
@@ -481,339 +492,401 @@
   // Init
   // -----------------------------------------------------------------------
 
-  initTheme();
+  function _init() {
+    initTheme();
 
-  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
-  // Overview actions
-  var cleanupBtn = document.getElementById('overview-cleanup');
-  var cleanupModal = document.getElementById('cleanup-modal');
+    // Overview actions
+    var cleanupBtn = document.getElementById('overview-cleanup');
+    var cleanupModal = document.getElementById('cleanup-modal');
 
-  function openCleanupModal() {
-    cleanupModal.classList.remove('hidden');
-  }
-
-  function closeCleanupModal() {
-    cleanupModal.classList.add('hidden');
-  }
-
-  function refreshAfterCleanup() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'refresh' }));
+    function openCleanupModal() {
+      cleanupModal.classList.remove('hidden');
     }
-  }
 
-  function formatCleanupStats(s) {
-    var parts = [];
-    if (s.agents) parts.push(s.agents + ' agent(s)');
-    if (s.messages) parts.push(s.messages + ' message(s)');
-    if (s.channels) parts.push(s.channels + ' channel(s)');
-    if (s.state) parts.push(s.state + ' state');
-    return parts.length ? parts.join(', ') : 'nothing to clean';
-  }
-
-  if (cleanupBtn) {
-    cleanupBtn.addEventListener('click', openCleanupModal);
-  }
-
-  document.getElementById('cleanup-cancel').addEventListener('click', closeCleanupModal);
-
-  cleanupModal.addEventListener('click', function (e) {
-    if (e.target === cleanupModal) closeCleanupModal();
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !cleanupModal.classList.contains('hidden')) {
-      closeCleanupModal();
+    function closeCleanupModal() {
+      cleanupModal.classList.add('hidden');
     }
-  });
 
-  function runCleanup(endpoint, label) {
-    closeCleanupModal();
-    fetch(endpoint, { method: 'POST' })
-      .then(function (r) {
-        if (!r.ok) throw new Error(r.status);
-        return r.json();
-      })
-      .then(function (data) {
-        showToast(label, formatCleanupStats(data));
-        refreshAfterCleanup();
-      })
-      .catch(function () {
-        showToast('Error', label + ' failed');
-      });
-  }
-
-  document.getElementById('cleanup-stale').addEventListener('click', function () {
-    runCleanup('/api/cleanup/stale', 'Stale cleanup');
-  });
-
-  document.getElementById('cleanup-full').addEventListener('click', function () {
-    runCleanup('/api/cleanup/full', 'Full cleanup');
-  });
-
-  var refreshBtn = document.getElementById('overview-refresh');
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', function () {
+    function refreshAfterCleanup() {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'refresh' }));
-        showToast('Refreshed', 'Dashboard data reloaded');
-      }
-    });
-  }
-
-  document.querySelectorAll('.stat-card-link').forEach(function (card) {
-    card.addEventListener('click', function () {
-      var target = card.getAttribute('data-nav');
-      if (target) switchView(target);
-    });
-  });
-
-  // Sidebar toggle (mobile)
-  var sidebarToggle = document.getElementById('sidebar-toggle');
-  var sidebar = document.getElementById('sidebar');
-  var sidebarOverlay = document.getElementById('sidebar-overlay');
-
-  if (sidebarToggle) {
-    sidebarToggle.addEventListener('click', function () {
-      var isOpen = sidebar.classList.toggle('open');
-      sidebarOverlay.classList.toggle('open', isOpen);
-      sidebarToggle.setAttribute('aria-expanded', String(isOpen));
-    });
-  }
-  if (sidebarOverlay) {
-    sidebarOverlay.addEventListener('click', function () {
-      sidebar.classList.remove('open');
-      sidebarOverlay.classList.remove('open');
-      sidebarToggle.setAttribute('aria-expanded', 'false');
-    });
-  }
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && sidebar && sidebar.classList.contains('open')) {
-      sidebar.classList.remove('open');
-      if (sidebarOverlay) sidebarOverlay.classList.remove('open');
-      if (sidebarToggle) {
-        sidebarToggle.setAttribute('aria-expanded', 'false');
-        sidebarToggle.focus();
       }
     }
-  });
 
-  document.querySelectorAll('.nav-link').forEach(function (link) {
-    link.addEventListener('click', function (e) {
-      e.preventDefault();
-      var view = this.getAttribute('data-view');
-      location.hash = view;
-      switchView(view);
-      if (sidebar) sidebar.classList.remove('open');
-      if (sidebarOverlay) sidebarOverlay.classList.remove('open');
-      if (sidebarToggle) sidebarToggle.setAttribute('aria-expanded', 'false');
+    function formatCleanupStats(s) {
+      var parts = [];
+      if (s.agents) parts.push(s.agents + ' agent(s)');
+      if (s.messages) parts.push(s.messages + ' message(s)');
+      if (s.channels) parts.push(s.channels + ' channel(s)');
+      if (s.state) parts.push(s.state + ' state');
+      return parts.length ? parts.join(', ') : 'nothing to clean';
+    }
+
+    if (cleanupBtn) {
+      cleanupBtn.addEventListener('click', openCleanupModal);
+    }
+
+    document.getElementById('cleanup-cancel').addEventListener('click', closeCleanupModal);
+
+    cleanupModal.addEventListener('click', function (e) {
+      if (e.target === cleanupModal) closeCleanupModal();
     });
-    link.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.click();
-      }
-      var links = Array.from(document.querySelectorAll('.nav-link'));
-      var idx = links.indexOf(this);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        var next = links[(idx + 1) % links.length];
-        next.focus();
-        next.click();
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-        e.preventDefault();
-        var prev = links[(idx - 1 + links.length) % links.length];
-        prev.focus();
-        prev.click();
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !cleanupModal.classList.contains('hidden')) {
+        closeCleanupModal();
       }
     });
-  });
 
-  document.getElementById('msg-search').addEventListener('input', AC.triggerSearch);
-  document.getElementById('state-filter').addEventListener('input', AC.renderState);
-
-  var feedTypeFilter = document.getElementById('feed-type-filter');
-  if (feedTypeFilter) {
-    feedTypeFilter.addEventListener('change', AC.renderFeed);
-  }
-
-  var clearMsgsBtn = document.getElementById('msg-clear');
-  if (clearMsgsBtn) {
-    clearMsgsBtn.addEventListener('click', function () {
-      if (!confirm('Clear all messages? This cannot be undone.')) return;
-      fetch('/api/messages', { method: 'DELETE' })
-        .then(function () {
-          AC.state.messages = [];
-          AC.state.messageCount = 0;
-          render();
-          showToast('Cleared', 'All messages purged');
+    function runCleanup(endpoint, label) {
+      closeCleanupModal();
+      AC._fetch(endpoint, { method: 'POST' })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          showToast(label, formatCleanupStats(data));
+          refreshAfterCleanup();
         })
         .catch(function () {
-          showToast('Error', 'Failed to clear messages');
+          showToast('Error', label + ' failed');
         });
+    }
+
+    document.getElementById('cleanup-stale').addEventListener('click', function () {
+      runCleanup('/api/cleanup/stale', 'Stale cleanup');
     });
-  }
 
-  document.getElementById('messages-list').addEventListener('click', function (e) {
-    var item = e.target.closest('.msg-compact[data-msg-id]');
-    if (!item) return;
-    var msgId = parseInt(item.getAttribute('data-msg-id'), 10);
-    AC.selectedMessageId = msgId;
-
-    var container = document.getElementById('messages-list');
-    container.querySelectorAll('.msg-compact.selected').forEach(function (el) {
-      el.classList.remove('selected');
+    document.getElementById('cleanup-full').addEventListener('click', function () {
+      runCleanup('/api/cleanup/full', 'Full cleanup');
     });
-    item.classList.add('selected');
 
-    var messages = AC.state.messages || [];
-    var threadRoots = {};
-    messages.forEach(function (m) {
-      if (m.thread_id) {
-        if (!threadRoots[m.thread_id]) threadRoots[m.thread_id] = [];
-        threadRoots[m.thread_id].push(m);
+    var refreshBtn = document.getElementById('overview-refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function () {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'refresh' }));
+          showToast('Refreshed', 'Dashboard data reloaded');
+        }
+      });
+    }
+
+    document.querySelectorAll('.stat-card-link').forEach(function (card) {
+      card.addEventListener('click', function () {
+        var target = card.getAttribute('data-nav');
+        if (target) switchView(target);
+      });
+    });
+
+    // Sidebar toggle (mobile)
+    var sidebarToggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var sidebarOverlay = document.getElementById('sidebar-overlay');
+
+    if (sidebarToggle) {
+      sidebarToggle.addEventListener('click', function () {
+        var isOpen = sidebar.classList.toggle('open');
+        sidebarOverlay.classList.toggle('open', isOpen);
+        sidebarToggle.setAttribute('aria-expanded', String(isOpen));
+      });
+    }
+    if (sidebarOverlay) {
+      sidebarOverlay.addEventListener('click', function () {
+        sidebar.classList.remove('open');
+        sidebarOverlay.classList.remove('open');
+        sidebarToggle.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && sidebar && sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('open');
+        if (sidebarToggle) {
+          sidebarToggle.setAttribute('aria-expanded', 'false');
+          sidebarToggle.focus();
+        }
       }
     });
-    AC.renderMessageDetail(msgId, threadRoots);
-  });
 
-  // Event delegation for morphdom-managed containers
-  document.getElementById('agents-list').addEventListener('click', function (e) {
-    var card = e.target.closest('.agent-card[data-agent-id]');
-    if (card) AC.setMessageFilter('agent', card.getAttribute('data-agent-id'));
-  });
-  document.getElementById('channels-list').addEventListener('click', function (e) {
-    var card = e.target.closest('[data-channel-id]');
-    if (card) AC.setMessageFilter('channel', card.getAttribute('data-channel-id'));
-  });
-  document.getElementById('overview-agents').addEventListener('click', function (e) {
-    var el = e.target.closest('[data-agent-id]');
-    if (el) AC.setMessageFilter('agent', el.getAttribute('data-agent-id'));
-  });
-  document.getElementById('overview-activity').addEventListener('click', function (e) {
-    var el = e.target.closest('[data-msg-id]');
-    if (!el) return;
-    var msgId = parseInt(el.getAttribute('data-msg-id'), 10);
-    AC.selectedMessageId = msgId;
-    AC.messageFilters.agent = null;
-    AC.messageFilters.channel = null;
-    location.hash = 'messages';
-    switchView('messages');
-    AC.renderMessages();
-    setTimeout(function () {
-      var target = document.querySelector('.msg-compact[data-msg-id="' + msgId + '"]');
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 50);
-  });
+    document.querySelectorAll('.nav-link').forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        var view = this.getAttribute('data-view');
+        location.hash = view;
+        switchView(view);
+        if (sidebar) sidebar.classList.remove('open');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('open');
+        if (sidebarToggle) sidebarToggle.setAttribute('aria-expanded', 'false');
+      });
+      link.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.click();
+        }
+        var links = Array.from(document.querySelectorAll('.nav-link'));
+        var idx = links.indexOf(this);
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          var next = links[(idx + 1) % links.length];
+          next.focus();
+          next.click();
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          var prev = links[(idx - 1 + links.length) % links.length];
+          prev.focus();
+          prev.click();
+        }
+      });
+    });
 
-  window.addEventListener('hashchange', handleHash);
-  handleHash();
-  connect();
+    document.getElementById('msg-search').addEventListener('input', AC.triggerSearch);
+    document.getElementById('state-filter').addEventListener('input', AC.renderState);
 
-  // ---------------------------------------------------------------------------
-  // Theme sync from parent (agent-desk) via executeJavaScript
-  // ---------------------------------------------------------------------------
-
-  window.addEventListener('message', function (event) {
-    if (!event.data || event.data.type !== 'theme-sync') return;
-    var colors = event.data.colors;
-    if (!colors) return;
-
-    function ensureContrast(bg, fg) {
-      var lum = function (hex) {
-        if (!hex || hex.charAt(0) !== '#' || hex.length < 7) return 0.5;
-        var r = parseInt(hex.slice(1, 3), 16) / 255;
-        var g = parseInt(hex.slice(3, 5), 16) / 255;
-        var b = parseInt(hex.slice(5, 7), 16) / 255;
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      };
-      var bgLum = lum(bg);
-      return bgLum < 0.5 ? (lum(fg) < 0.4 ? '#e0e0e0' : fg) : lum(fg) > 0.6 ? '#333333' : fg;
+    var feedTypeFilter = document.getElementById('feed-type-filter');
+    if (feedTypeFilter) {
+      feedTypeFilter.addEventListener('change', AC.renderFeed);
     }
 
-    var root = document.documentElement;
-    var bgColor = colors.bg || null;
+    var clearMsgsBtn = document.getElementById('msg-clear');
+    if (clearMsgsBtn) {
+      clearMsgsBtn.addEventListener('click', function () {
+        if (!confirm('Clear all messages? This cannot be undone.')) return;
+        AC._fetch('/api/messages', { method: 'DELETE' })
+          .then(function () {
+            AC.state.messages = [];
+            AC.state.messageCount = 0;
+            render();
+            showToast('Cleared', 'All messages purged');
+          })
+          .catch(function () {
+            showToast('Error', 'Failed to clear messages');
+          });
+      });
+    }
 
-    if (colors.bg) root.style.setProperty('--bg', colors.bg);
-    if (colors.bgSurface) root.style.setProperty('--bg-surface', colors.bgSurface);
-    if (colors.bgElevated) root.style.setProperty('--bg-elevated', colors.bgElevated);
-    if (colors.bgHover) root.style.setProperty('--bg-hover', colors.bgHover);
+    document.getElementById('messages-list').addEventListener('click', function (e) {
+      var item = e.target.closest('.msg-compact[data-msg-id]');
+      if (!item) return;
+      var msgId = parseInt(item.getAttribute('data-msg-id'), 10);
+      AC.selectedMessageId = msgId;
 
-    if (colors.border) root.style.setProperty('--border', colors.border);
-    if (colors.borderLight) root.style.setProperty('--border-light', colors.borderLight);
+      var container = document.getElementById('messages-list');
+      container.querySelectorAll('.msg-compact.selected').forEach(function (el) {
+        el.classList.remove('selected');
+      });
+      item.classList.add('selected');
 
-    if (colors.text)
-      root.style.setProperty(
-        '--text',
-        bgColor ? ensureContrast(bgColor, colors.text) : colors.text,
-      );
-    if (colors.textMuted)
-      root.style.setProperty(
-        '--text-muted',
-        bgColor ? ensureContrast(bgColor, colors.textMuted) : colors.textMuted,
-      );
-    if (colors.textDim)
-      root.style.setProperty(
-        '--text-dim',
-        bgColor ? ensureContrast(bgColor, colors.textDim) : colors.textDim,
-      );
+      var messages = AC.state.messages || [];
+      var threadRoots = {};
+      messages.forEach(function (m) {
+        if (m.thread_id) {
+          if (!threadRoots[m.thread_id]) threadRoots[m.thread_id] = [];
+          threadRoots[m.thread_id].push(m);
+        }
+      });
+      AC.renderMessageDetail(msgId, threadRoots);
+    });
 
-    if (colors.accent) root.style.setProperty('--accent', colors.accent);
-    if (colors.accentDim) root.style.setProperty('--accent-dim', colors.accentDim);
+    // Event delegation for morphdom-managed containers
+    document.getElementById('agents-list').addEventListener('click', function (e) {
+      var card = e.target.closest('.agent-card[data-agent-id]');
+      if (card) AC.setMessageFilter('agent', card.getAttribute('data-agent-id'));
+    });
+    document.getElementById('channels-list').addEventListener('click', function (e) {
+      var card = e.target.closest('[data-channel-id]');
+      if (card) AC.setMessageFilter('channel', card.getAttribute('data-channel-id'));
+    });
+    document.getElementById('overview-agents').addEventListener('click', function (e) {
+      var el = e.target.closest('[data-agent-id]');
+      if (el) AC.setMessageFilter('agent', el.getAttribute('data-agent-id'));
+    });
+    document.getElementById('overview-activity').addEventListener('click', function (e) {
+      var el = e.target.closest('[data-msg-id]');
+      if (!el) return;
+      var msgId = parseInt(el.getAttribute('data-msg-id'), 10);
+      AC.selectedMessageId = msgId;
+      AC.messageFilters.agent = null;
+      AC.messageFilters.channel = null;
+      location.hash = 'messages';
+      switchView('messages');
+      AC.renderMessages();
+      setTimeout(function () {
+        var target = document.querySelector('.msg-compact[data-msg-id="' + msgId + '"]');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    });
 
-    if (colors.green) root.style.setProperty('--green', colors.green);
-    if (colors.yellow) root.style.setProperty('--yellow', colors.yellow);
-    if (colors.orange) root.style.setProperty('--orange', colors.orange);
-    if (colors.red) root.style.setProperty('--red', colors.red);
-    if (colors.purple) root.style.setProperty('--purple', colors.purple);
+    window.addEventListener('hashchange', handleHash);
+    handleHash();
+    connect();
 
-    if (colors.focusRing) root.style.setProperty('--focus-ring', colors.focusRing);
+    // ---------------------------------------------------------------------------
+    // Theme sync from parent (agent-desk) via executeJavaScript
+    // ---------------------------------------------------------------------------
 
-    if (colors.isDark !== undefined) {
-      if (colors.isDark) {
-        root.style.setProperty(
-          '--shadow-1',
-          '0px 1px 2px 0px rgba(0,0,0,0.6), 0px 1px 3px 1px rgba(0,0,0,0.3)',
-        );
-        root.style.setProperty(
-          '--shadow-2',
-          '0px 1px 2px 0px rgba(0,0,0,0.6), 0px 2px 6px 2px rgba(0,0,0,0.3)',
-        );
-        root.style.setProperty(
-          '--shadow-3',
-          '0px 1px 3px 0px rgba(0,0,0,0.6), 0px 4px 8px 3px rgba(0,0,0,0.3)',
-        );
-      } else {
-        root.style.setProperty(
-          '--shadow-1',
-          '0px 1px 2px 0px rgba(0,0,0,0.3), 0px 1px 3px 1px rgba(0,0,0,0.15)',
-        );
-        root.style.setProperty(
-          '--shadow-2',
-          '0px 1px 2px 0px rgba(0,0,0,0.3), 0px 2px 6px 2px rgba(0,0,0,0.15)',
-        );
-        root.style.setProperty(
-          '--shadow-3',
-          '0px 1px 3px 0px rgba(0,0,0,0.3), 0px 4px 8px 3px rgba(0,0,0,0.15)',
-        );
+    window.addEventListener('message', function (event) {
+      if (!event.data || event.data.type !== 'theme-sync') return;
+      var colors = event.data.colors;
+      if (!colors) return;
+
+      function ensureContrast(bg, fg) {
+        var lum = function (hex) {
+          if (!hex || hex.charAt(0) !== '#' || hex.length < 7) return 0.5;
+          var r = parseInt(hex.slice(1, 3), 16) / 255;
+          var g = parseInt(hex.slice(3, 5), 16) / 255;
+          var b = parseInt(hex.slice(5, 7), 16) / 255;
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        var bgLum = lum(bg);
+        return bgLum < 0.5 ? (lum(fg) < 0.4 ? '#e0e0e0' : fg) : lum(fg) > 0.6 ? '#333333' : fg;
       }
-      root.style.setProperty('--shadow-sm', 'var(--shadow-1)');
-      root.style.setProperty('--shadow-md', 'var(--shadow-2)');
-      root.style.setProperty('--shadow-hover', 'var(--shadow-3)');
+
+      var root = document.documentElement;
+      var bgColor = colors.bg || null;
+
+      if (colors.bg) root.style.setProperty('--bg', colors.bg);
+      if (colors.bgSurface) root.style.setProperty('--bg-surface', colors.bgSurface);
+      if (colors.bgElevated) root.style.setProperty('--bg-elevated', colors.bgElevated);
+      if (colors.bgHover) root.style.setProperty('--bg-hover', colors.bgHover);
+
+      if (colors.border) root.style.setProperty('--border', colors.border);
+      if (colors.borderLight) root.style.setProperty('--border-light', colors.borderLight);
+
+      if (colors.text)
+        root.style.setProperty(
+          '--text',
+          bgColor ? ensureContrast(bgColor, colors.text) : colors.text,
+        );
+      if (colors.textMuted)
+        root.style.setProperty(
+          '--text-muted',
+          bgColor ? ensureContrast(bgColor, colors.textMuted) : colors.textMuted,
+        );
+      if (colors.textDim)
+        root.style.setProperty(
+          '--text-dim',
+          bgColor ? ensureContrast(bgColor, colors.textDim) : colors.textDim,
+        );
+
+      if (colors.accent) root.style.setProperty('--accent', colors.accent);
+      if (colors.accentDim) root.style.setProperty('--accent-dim', colors.accentDim);
+
+      if (colors.green) root.style.setProperty('--green', colors.green);
+      if (colors.yellow) root.style.setProperty('--yellow', colors.yellow);
+      if (colors.orange) root.style.setProperty('--orange', colors.orange);
+      if (colors.red) root.style.setProperty('--red', colors.red);
+      if (colors.purple) root.style.setProperty('--purple', colors.purple);
+
+      if (colors.focusRing) root.style.setProperty('--focus-ring', colors.focusRing);
+
+      if (colors.isDark !== undefined) {
+        if (colors.isDark) {
+          root.style.setProperty(
+            '--shadow-1',
+            '0px 1px 2px 0px rgba(0,0,0,0.6), 0px 1px 3px 1px rgba(0,0,0,0.3)',
+          );
+          root.style.setProperty(
+            '--shadow-2',
+            '0px 1px 2px 0px rgba(0,0,0,0.6), 0px 2px 6px 2px rgba(0,0,0,0.3)',
+          );
+          root.style.setProperty(
+            '--shadow-3',
+            '0px 1px 3px 0px rgba(0,0,0,0.6), 0px 4px 8px 3px rgba(0,0,0,0.3)',
+          );
+        } else {
+          root.style.setProperty(
+            '--shadow-1',
+            '0px 1px 2px 0px rgba(0,0,0,0.3), 0px 1px 3px 1px rgba(0,0,0,0.15)',
+          );
+          root.style.setProperty(
+            '--shadow-2',
+            '0px 1px 2px 0px rgba(0,0,0,0.3), 0px 2px 6px 2px rgba(0,0,0,0.15)',
+          );
+          root.style.setProperty(
+            '--shadow-3',
+            '0px 1px 3px 0px rgba(0,0,0,0.3), 0px 4px 8px 3px rgba(0,0,0,0.15)',
+          );
+        }
+        root.style.setProperty('--shadow-sm', 'var(--shadow-1)');
+        root.style.setProperty('--shadow-md', 'var(--shadow-2)');
+        root.style.setProperty('--shadow-hover', 'var(--shadow-3)');
+      }
+
+      if (colors.isDark !== undefined) {
+        document.body.className =
+          document.body.className.replace(/theme-\w+/, '').trim() +
+          ' theme-' +
+          (colors.isDark ? 'dark' : 'light');
+        localStorage.setItem('agent-comm-theme', colors.isDark ? 'dark' : 'light');
+        updateThemeIcon(colors.isDark ? 'dark' : 'light');
+      }
+
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle) themeToggle.style.display = 'none';
+    });
+  } // end _init
+
+  // -----------------------------------------------------------------------
+  // Plugin API — mount / unmount
+  // -----------------------------------------------------------------------
+
+  /**
+   * Mount the agent-comm UI into a container element.
+   * @param {HTMLElement} container - DOM element to mount into
+   * @param {Object} [options]
+   * @param {string} [options.baseUrl] - HTTP base URL (e.g. 'http://localhost:3421')
+   * @param {string} [options.wsUrl]   - WebSocket host (e.g. 'localhost:3421')
+   * @param {string} [options.cssUrl]  - URL of styles.css to inject
+   */
+  AC.mount = function (container, options) {
+    options = options || {};
+    AC._baseUrl = options.baseUrl || '';
+    AC._wsUrl = options.wsUrl || null;
+
+    // Inject CSS if provided and not already loaded
+    if (options.cssUrl && !document.getElementById('ac-plugin-css')) {
+      var link = document.createElement('link');
+      link.id = 'ac-plugin-css';
+      link.rel = 'stylesheet';
+      link.href = options.cssUrl;
+      document.head.appendChild(link);
     }
 
-    if (colors.isDark !== undefined) {
-      document.body.className =
-        document.body.className.replace(/theme-\w+/, '').trim() +
-        ' theme-' +
-        (colors.isDark ? 'dark' : 'light');
-      localStorage.setItem('agent-comm-theme', colors.isDark ? 'dark' : 'light');
-      updateThemeIcon(colors.isDark ? 'dark' : 'light');
+    // Inject HTML template
+    if (typeof AC._template === 'function') {
+      container.innerHTML = AC._template();
     }
 
-    var themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) themeToggle.style.display = 'none';
-  });
+    _init();
+  };
+
+  /**
+   * Unmount and clean up (disconnect WS, clear state).
+   */
+  AC.unmount = function () {
+    if (ws) {
+      ws.onclose = null; // prevent reconnect
+      ws.close();
+      ws = null;
+    }
+    clearTimeout(reconnectTimer);
+    loaded = false;
+    lastStateFingerprint = '';
+    AC.state = {
+      agents: [],
+      channels: [],
+      messages: [],
+      state: [],
+      messageCount: 0,
+      feed: [],
+      branches: [],
+    };
+  };
+
+  // Auto-init for standalone mode (index.html loads scripts directly)
+  _init();
 })();

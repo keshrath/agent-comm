@@ -73,7 +73,7 @@
     }
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(function () {
-      fetch('/api/search?q=' + encodeURIComponent(query) + '&limit=50')
+      AC._fetch('/api/search?q=' + encodeURIComponent(query) + '&limit=50')
         .then(function (r) {
           return r.json();
         })
@@ -320,7 +320,7 @@
             var prevScrollHeight = container.scrollHeight;
 
             // Fetch older messages via REST
-            fetch('/api/messages?limit=' + MSG_PAGE_SIZE + '&offset=' + loadedCount)
+            AC._fetch('/api/messages?limit=' + MSG_PAGE_SIZE + '&offset=' + loadedCount)
               .then(function (r) {
                 return r.json();
               })
