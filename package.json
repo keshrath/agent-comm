@@ -1,6 +1,6 @@
 {
   "name": "agent-comm",
-  "version": "1.2.9",
+  "version": "1.2.10",
   "description": "Agent-agnostic intercommunication system — sessions, messaging, channels, shared state, and real-time events",
   "type": "module",
   "main": "dist/index.js",
@@ -91,6 +91,7 @@
   "files": [
     "dist/",
     "scripts/",
+    "agent-desk-plugin.json",
     "docs/*.md",
     "README.md",
     "CHANGELOG.md",
