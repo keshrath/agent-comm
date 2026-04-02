@@ -98,7 +98,7 @@
 
   function renderAgents() {
     var agents = AC.state.agents || [];
-    var container = document.getElementById('agents-list');
+    var container = AC._root.getElementById('agents-list');
 
     if (agents.length === 0) {
       AC.morph(

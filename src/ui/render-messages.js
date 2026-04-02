@@ -21,7 +21,7 @@
   /** Return the currently filtered message list (without slicing for display). */
   function getFilteredMessages() {
     var messages = AC.state.messages || [];
-    var searchInput = document.getElementById('msg-search');
+    var searchInput = AC._root.getElementById('msg-search');
     var query = (searchInput ? searchInput.value : '').trim();
 
     var result = AC.searchResults !== null ? AC.searchResults : messages;
@@ -55,7 +55,7 @@
     AC.messageFilters[type] = AC.messageFilters[type] === value ? null : value;
     AC.searchResults = null;
     AC.msgDisplayCount = MSG_PAGE_SIZE;
-    var searchInput = document.getElementById('msg-search');
+    var searchInput = AC._root.getElementById('msg-search');
     if (searchInput) searchInput.value = '';
     location.hash = 'messages';
     AC.switchView('messages');
@@ -63,7 +63,7 @@
   }
 
   function triggerSearch() {
-    var searchInput = document.getElementById('msg-search');
+    var searchInput = AC._root.getElementById('msg-search');
     var query = (searchInput.value || '').trim();
     if (query.length < 2) {
       AC.searchResults = null;
@@ -93,9 +93,9 @@
 
   function renderMessages() {
     var messages = AC.state.messages || [];
-    var container = document.getElementById('messages-list');
-    var detailPane = document.getElementById('message-detail');
-    var searchInput = document.getElementById('msg-search');
+    var container = AC._root.getElementById('messages-list');
+    var detailPane = AC._root.getElementById('message-detail');
+    var searchInput = AC._root.getElementById('msg-search');
     var query = (searchInput.value || '').trim();
 
     var filtered = AC.searchResults !== null ? AC.searchResults : messages;
@@ -123,7 +123,7 @@
       }
     }
 
-    var filtersEl = document.getElementById('msg-filters');
+    var filtersEl = AC._root.getElementById('msg-filters');
     if (filtersEl) {
       var chips = [];
       if (AC.searchResults !== null) {
@@ -154,7 +154,7 @@
           var key = this.getAttribute('data-clear');
           if (key === 'search') {
             AC.searchResults = null;
-            document.getElementById('msg-search').value = '';
+            AC._root.getElementById('msg-search').value = '';
           } else {
             AC.messageFilters[key] = null;
           }
@@ -292,7 +292,7 @@
     );
 
     // Hide loading indicator when not actively loading
-    var loadEl = document.getElementById('msg-load-older');
+    var loadEl = AC._root.getElementById('msg-load-older');
     if (loadEl) {
       loadEl.style.display = AC.msgLoadingOlder ? '' : 'none';
     }
@@ -315,7 +315,7 @@
           var loadedCount = (AC.state.messages || []).length;
           if (loadedCount < totalOnServer) {
             AC.msgLoadingOlder = true;
-            var indicator = document.getElementById('msg-load-older');
+            var indicator = AC._root.getElementById('msg-load-older');
             if (indicator) indicator.style.display = '';
             var prevScrollHeight = container.scrollHeight;
 
@@ -351,7 +351,7 @@
   }
 
   function renderMessageDetail(msgId, threadRoots) {
-    var detailPane = document.getElementById('message-detail');
+    var detailPane = AC._root.getElementById('message-detail');
     if (!detailPane) return;
 
     var messages = AC.state.messages || [];
@@ -542,7 +542,7 @@
         var targetId = parseInt(this.getAttribute('data-goto-msg'), 10);
         AC.selectedMessageId = targetId;
         renderMessages();
-        var targetEl = document.querySelector('.msg-compact[data-msg-id="' + targetId + '"]');
+        var targetEl = AC._root.querySelector('.msg-compact[data-msg-id="' + targetId + '"]');
         if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
     });

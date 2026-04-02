@@ -9,8 +9,8 @@
 
   function renderState() {
     var entries = AC.state.state || [];
-    var tbody = document.getElementById('state-tbody');
-    var filterInput = document.getElementById('state-filter');
+    var tbody = AC._root.getElementById('state-tbody');
+    var filterInput = AC._root.getElementById('state-filter');
     var filter = (filterInput.value || '').toLowerCase();
 
     var filtered = entries;

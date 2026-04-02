@@ -29,7 +29,7 @@
 
   function renderChannels() {
     var channels = AC.state.channels || [];
-    var container = document.getElementById('channels-list');
+    var container = AC._root.getElementById('channels-list');
 
     if (channels.length === 0) {
       AC.morph(

@@ -75,17 +75,17 @@
 
   function onFeedScroll() {
     // Feed view must be active for scroll to matter
-    var feedView = document.getElementById('view-feed');
+    var feedView = AC._root.getElementById('view-feed');
     if (!feedView || !feedView.classList.contains('active')) return;
 
-    var scrollParent = document.getElementById('content');
+    var scrollParent = AC._root.getElementById('content');
     if (!scrollParent) return;
     var threshold = 100;
     var nearBottom =
       scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < threshold;
     if (nearBottom && !AC._feedLoading) {
       var feed = AC.state.feed || [];
-      var filterEl = document.getElementById('feed-type-filter');
+      var filterEl = AC._root.getElementById('feed-type-filter');
       var typeFilter = filterEl ? filterEl.value : '';
       var loadedCount = feed.length;
 
@@ -113,7 +113,7 @@
 
   function bindFeedScroll() {
     if (AC._feedScrollBound) return;
-    var scrollParent = document.getElementById('content');
+    var scrollParent = AC._root.getElementById('content');
     if (!scrollParent) return;
     scrollParent.addEventListener('scroll', onFeedScroll);
     AC._feedScrollBound = true;
@@ -121,12 +121,12 @@
 
   function renderFeed(resetPage) {
     var feed = AC.state.feed || [];
-    var container = document.getElementById('feed-list');
+    var container = AC._root.getElementById('feed-list');
     if (!container) return;
 
     bindFeedScroll();
 
-    var filterEl = document.getElementById('feed-type-filter');
+    var filterEl = AC._root.getElementById('feed-type-filter');
     var typeFilter = filterEl ? filterEl.value : '';
 
     // Reset page count on new data or filter change

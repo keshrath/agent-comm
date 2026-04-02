@@ -6,12 +6,12 @@
     "url": "https://github.com/keshrath/agent-comm",
     "source": "github"
   },
-  "version": "1.2.10",
+  "version": "1.2.11",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agent-comm",
-      "version": "1.2.10",
+      "version": "1.2.11",
       "transport": {
         "type": "stdio"
       }

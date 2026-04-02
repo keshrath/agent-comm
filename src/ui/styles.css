@@ -811,7 +811,7 @@ body {
   height: 16px;
   padding: 0 4px;
   border-radius: 8px;
-  background: #5d8da8;
+  background: var(--accent, #5d8da8);
   color: #ffffff;
   font-size: 9px;
   font-weight: 700;
