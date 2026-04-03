@@ -899,6 +899,8 @@
 
     AC._root = shadow;
     _init();
+    var themeBtn = shadow.getElementById('theme-toggle');
+    if (themeBtn) themeBtn.style.display = 'none';
   };
 
   AC.unmount = function () {
