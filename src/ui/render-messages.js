@@ -236,7 +236,7 @@
               '">' +
               '<div class="msg-compact-header">' +
               '<span class="message-avatar">' +
-              AC.esc(fromName.substring(0, 2).toUpperCase()) +
+              AC.esc(AC.getInitials(fromName)) +
               '</span>' +
               '<span class="msg-compact-from">' +
               AC.esc(fromName) +
@@ -387,7 +387,7 @@
       '<div class="detail-card">' +
       '<div class="detail-header">' +
       '<div class="detail-avatar">' +
-      AC.esc(fromName.substring(0, 2).toUpperCase()) +
+      AC.esc(AC.getInitials(fromName)) +
       '</div>' +
       '<div class="detail-sender">' +
       '<div class="detail-sender-name">' +
@@ -513,7 +513,7 @@
           r.id +
           '">' +
           '<div class="thread-msg-avatar">' +
-          AC.esc(rName.substring(0, 2).toUpperCase()) +
+          AC.esc(AC.getInitials(rName)) +
           '</div>' +
           '<div class="thread-msg-content">' +
           '<div class="thread-msg-header">' +

@@ -64,7 +64,9 @@
       '<div class="card-meta">Registered: ' +
       AC.timeAgo(a.registered_at) +
       '</div>' +
-      (msgCount > 0 ? '<div class="card-meta">' + msgCount + ' messages</div>' : '') +
+      (msgCount > 0
+        ? '<div class="card-meta">' + msgCount + ' message' + (msgCount !== 1 ? 's' : '') + '</div>'
+        : '') +
       '<div style="margin-top:8px">' +
       caps
         .map(function (c) {

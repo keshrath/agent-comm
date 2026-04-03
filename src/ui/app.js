@@ -625,7 +625,7 @@
       link.addEventListener('click', function (e) {
         e.preventDefault();
         var view = this.getAttribute('data-view');
-        location.hash = view;
+        if (AC._root === document) location.hash = view;
         switchView(view);
         if (sidebar) sidebar.classList.remove('open');
         if (sidebarOverlay) sidebarOverlay.classList.remove('open');
@@ -720,7 +720,7 @@
       AC.selectedMessageId = msgId;
       AC.messageFilters.agent = null;
       AC.messageFilters.channel = null;
-      location.hash = 'messages';
+      if (AC._root === document) location.hash = 'messages';
       switchView('messages');
       AC.renderMessages();
       setTimeout(function () {
@@ -729,8 +729,13 @@
       }, 50);
     });
 
-    window.addEventListener('hashchange', handleHash);
-    handleHash();
+    // In plugin mode (shadow DOM), don't use location.hash — default to overview
+    if (AC._root !== document) {
+      switchView('overview');
+    } else {
+      window.addEventListener('hashchange', handleHash);
+      handleHash();
+    }
     connect();
 
     // ---------------------------------------------------------------------------
