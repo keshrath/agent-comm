@@ -228,12 +228,13 @@ Register this agent with the communication hub. Returns the agent identity. Must
 
 **Parameters:**
 
-| Name           | Type     | Required | Description                                                      |
-| -------------- | -------- | -------- | ---------------------------------------------------------------- |
-| `name`         | string   | Yes      | Human-readable agent name (2-64 chars, alphanumeric with . \_ -) |
-| `capabilities` | string[] | No       | Capability tags (e.g. "code-review", "testing")                  |
-| `metadata`     | object   | No       | Arbitrary metadata (JSON object)                                 |
-| `skills`       | array    | No       | Skills this agent provides (objects with id, name, tags)         |
+| Name           | Type     | Required | Description                                                            |
+| -------------- | -------- | -------- | ---------------------------------------------------------------------- |
+| `name`         | string   | Yes      | Human-readable agent name (2-64 chars, alphanumeric with . \_ -)       |
+| `capabilities` | string[] | No       | Capability tags (e.g. "code-review", "testing")                        |
+| `metadata`     | object   | No       | Arbitrary metadata (JSON object)                                       |
+| `skills`       | array    | No       | Skills this agent provides (objects with id, name, tags)               |
+| `channels`     | string[] | No       | Channels to auto-create and join after registration (e.g. ["general"]) |
 
 Each skill object has:
 
@@ -246,7 +247,7 @@ Each skill object has:
 **Example usage:**
 
 ```
-comm_register with name "code-reviewer", capabilities ["review", "testing"], skills [{"id": "pr-review", "name": "Pull Request Review", "tags": ["git", "review"]}]
+comm_register with name "code-reviewer", capabilities ["review", "testing"], channels ["general"], skills [{"id": "pr-review", "name": "Pull Request Review", "tags": ["git", "review"]}]
 ```
 
 **Example response:**
@@ -255,7 +256,8 @@ comm_register with name "code-reviewer", capabilities ["review", "testing"], ski
 {
   "id": "a1b2c3d4-...",
   "name": "code-reviewer",
-  "status": "online"
+  "status": "online",
+  "joined_channels": ["general"]
 }
 ```
 

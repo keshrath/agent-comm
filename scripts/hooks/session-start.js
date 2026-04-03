@@ -13,7 +13,7 @@ const msg = {
   hookSpecificOutput: {
     hookEventName: 'SessionStart',
     additionalContext: `Pipeline: http://localhost:${commPort + 1}
-agent-comm startup: 1) comm_register 2) comm_channel({ action: "join", channel: "general" }) 3) comm_send({ channel: "general" }) your intent 4) comm_inbox — then proceed.
+agent-comm startup: 1) comm_register with channels: ["general"] 2) comm_send({ channel: "general" }) your intent 3) comm_inbox — then proceed.
 Dashboard: http://localhost:${commPort}
 Note: You will be reminded to check comm_inbox when new messages arrive. Always call comm_inbox before starting significant work to check for coordination signals from other agents.
 Knowledge: http://localhost:${commPort + 2}`,

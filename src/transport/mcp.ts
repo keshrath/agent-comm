@@ -56,6 +56,12 @@ export const tools: ToolDefinition[] = [
           },
           description: 'Skills this agent provides (for skill-based discovery)',
         },
+        channels: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Channels to auto-create and join after registration (e.g. ["general"]). Non-existent channels are created on the fly.',
+        },
       },
       required: ['name'],
     },

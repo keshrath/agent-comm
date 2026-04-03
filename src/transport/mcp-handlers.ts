@@ -86,7 +86,17 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     if (agent.current) {
       const existing = ctx.agents.getById(agent.current.id);
       if (existing && existing.status !== 'offline') {
-        return existing;
+        // Still join requested channels even for existing agents
+        const rawCh = args.channels;
+        const joined: string[] = [];
+        if (Array.isArray(rawCh) && rawCh.every((c) => typeof c === 'string')) {
+          for (const ch of rawCh as string[]) {
+            const channel = ctx.channels.create(ch, existing.id);
+            ctx.channels.join(channel.id, existing.id);
+            joined.push(ch);
+          }
+        }
+        return joined.length > 0 ? { ...existing, joined_channels: joined } : existing;
       }
     }
 
@@ -104,7 +114,25 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       registered.name,
       registered.name + ' registered',
     );
-    return registered;
+
+    // Auto-join channels if requested
+    const rawChannels = args.channels;
+    const joinedChannels: string[] = [];
+    if (rawChannels !== undefined && rawChannels !== null) {
+      if (!Array.isArray(rawChannels) || !rawChannels.every((c) => typeof c === 'string')) {
+        throw new ValidationError('"channels" must be an array of strings.');
+      }
+      for (const ch of rawChannels as string[]) {
+        const channel = ctx.channels.create(ch, registered.id);
+        ctx.channels.join(channel.id, registered.id);
+        ctx.feed.logInternal(registered.id, 'channel_join', ch, registered.name + ' joined #' + ch);
+        joinedChannels.push(ch);
+      }
+    }
+
+    return joinedChannels.length > 0
+      ? { ...registered, joined_channels: joinedChannels }
+      : registered;
   },
 
   comm_agents(ctx, args, agent) {

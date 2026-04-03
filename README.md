@@ -109,7 +109,7 @@ Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and confi
 
 | Tool            | Description                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------------- |
-| `comm_register` | Register with name, capabilities, metadata, and skills                                                     |
+| `comm_register` | Register with name, capabilities, metadata, skills, and auto-join channels                                 |
 | `comm_agents`   | Agent management — actions: `list`, `discover`, `whoami`, `heartbeat`, `status`, `unregister`              |
 | `comm_send`     | Send messages — direct (`to`), channel, broadcast, reply (`reply_to`), forward (`forward`)                 |
 | `comm_inbox`    | Read inbox (direct + channel messages, unread filter, thread view via `thread_id`)                         |

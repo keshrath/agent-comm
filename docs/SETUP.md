@@ -255,11 +255,9 @@ agent-comm ships with four hook scripts across six events (including subagent li
 
 Injects a system message with a mandatory startup sequence:
 
-1. `comm_register` — register with a unique session name
-2. `comm_channel({ action: "create", channel: "general" })` — ensure the general channel exists
-3. `comm_channel({ action: "join", channel: "general" })` — join it
-4. `comm_send({ channel: "general", content: "..." })` — announce what work this session will do
-5. `comm_inbox` — check for messages from other agents
+1. `comm_register` with `channels: ["general"]` — register and auto-create/join the general channel
+2. `comm_send({ channel: "general", content: "..." })` — announce what work this session will do
+3. `comm_inbox` — check for messages from other agents
 
 #### UserPromptSubmit (`scripts/hooks/check-registration.js`)
 
@@ -346,10 +344,9 @@ You are part of a team of agents. Communicate actively — not just at startup.
 
 ### At session start
 
-1. `comm_register` — register with a unique name (check `comm_agents({ action: "list" })` first)
-2. `comm_channel({ action: "join", channel: "general" })`
-3. `comm_send({ channel: "general", content: "..." })` — announce what you're working on
-4. `comm_inbox` — check for messages from other agents
+1. `comm_register` with `channels: ["general"]` — register and auto-create/join channels
+2. `comm_send({ channel: "general", content: "..." })` — announce what you're working on
+3. `comm_inbox` — check for messages from other agents
 
 ### During your session
 

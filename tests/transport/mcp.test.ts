@@ -85,6 +85,37 @@ describe('MCP Tool Handler', () => {
       const inbox = h2('comm_inbox', {}) as unknown[];
       expect(inbox).toHaveLength(1);
     });
+
+    it('auto-joins channels via comm_register channels param', () => {
+      const h1 = createToolHandler(ctx);
+      const h2 = createToolHandler(ctx);
+
+      h1('comm_register', { name: 'creator' });
+      h1('comm_channel', { action: 'create', channel: 'general' });
+      h1('comm_channel', { action: 'create', channel: 'dev' });
+
+      const result = h2('comm_register', {
+        name: 'joiner',
+        channels: ['general', 'dev'],
+      }) as Record<string, unknown>;
+      expect(result.joined_channels).toEqual(['general', 'dev']);
+
+      // Should be able to post to joined channels without separate join call
+      h2('comm_send', { channel: 'general', content: 'hello from register' });
+      const inbox = h1('comm_inbox', {}) as unknown[];
+      expect(inbox).toHaveLength(1);
+    });
+
+    it('auto-creates non-existent channels in channels param', () => {
+      const result = handle('comm_register', {
+        name: 'creator-agent',
+        channels: ['brand-new'],
+      }) as Record<string, unknown>;
+      expect(result.joined_channels).toEqual(['brand-new']);
+
+      // Channel should now exist and agent should be a member
+      handle('comm_send', { channel: 'brand-new', content: 'it works' });
+    });
   });
 
   describe('state flow', () => {
