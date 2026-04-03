@@ -911,5 +911,9 @@
   var params = new URLSearchParams(location.search);
   if (params.get('baseUrl')) AC._baseUrl = params.get('baseUrl');
   if (params.get('wsUrl')) AC._wsUrl = params.get('wsUrl');
-  _init();
+  try {
+    _init();
+  } catch (e) {
+    /* standalone init may fail in file:// context — plugin mode uses mount() */
+  }
 })();
