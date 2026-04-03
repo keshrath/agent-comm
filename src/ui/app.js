@@ -57,14 +57,22 @@
 
   function initTheme() {
     var saved = localStorage.getItem('agent-comm-theme') || 'light';
-    document.body.className = 'theme-' + saved;
+    if (saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
     updateThemeIcon(saved);
   }
 
   function toggleTheme() {
-    var current = document.body.className.includes('dark') ? 'dark' : 'light';
+    var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
     var next = current === 'dark' ? 'light' : 'dark';
-    document.body.className = 'theme-' + next;
+    if (next === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
     localStorage.setItem('agent-comm-theme', next);
     updateThemeIcon(next);
   }
@@ -818,10 +826,11 @@
       }
 
       if (colors.isDark !== undefined) {
-        document.body.className =
-          document.body.className.replace(/theme-\w+/, '').trim() +
-          ' theme-' +
-          (colors.isDark ? 'dark' : 'light');
+        if (colors.isDark) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+        }
         localStorage.setItem('agent-comm-theme', colors.isDark ? 'dark' : 'light');
         updateThemeIcon(colors.isDark ? 'dark' : 'light');
       }
@@ -877,7 +886,8 @@
 
     if (typeof AC._template === 'function') {
       var wrapper = document.createElement('div');
-      wrapper.className = 'theme-dark ac-wrapper';
+      wrapper.setAttribute('data-theme', 'dark');
+      wrapper.className = 'ac-wrapper';
       wrapper.innerHTML = AC._template();
       shadow.appendChild(wrapper);
     }

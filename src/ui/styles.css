@@ -6,7 +6,7 @@
    Theme variables
    -------------------------------------------------------------------------- */
 
-.theme-light {
+:root {
   --bg: #ffffff;
   --bg-surface: #f5f7f9;
   --bg-elevated: #edf0f4;
@@ -17,16 +17,36 @@
   --text-muted: #5a6b78;
   --text-dim: #8895a0;
   --accent: #5d8da8;
+  --accent-hover: #4e7d98;
   --accent-dim: #243742;
   --green: #1a7f37;
+  --green-dim: rgba(26, 127, 55, 0.15);
   --yellow: #9a6700;
+  --yellow-dim: rgba(154, 103, 0, 0.15);
   --orange: #bc4c00;
+  --orange-dim: rgba(188, 76, 0, 0.15);
   --red: #cf222e;
+  --red-dim: rgba(207, 34, 46, 0.15);
   --purple: #6e78a8;
+  --purple-dim: rgba(110, 120, 168, 0.15);
+  --blue: #2563eb;
+  --blue-dim: rgba(37, 99, 235, 0.15);
   --focus-ring: rgba(93, 141, 168, 0.35);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --sidebar-width: 240px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --shadow-1: 0px 1px 2px 0px rgba(0, 0, 0, 0.3), 0px 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --shadow-2: 0px 1px 2px 0px rgba(0, 0, 0, 0.3), 0px 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --shadow-3: 0px 1px 3px 0px rgba(0, 0, 0, 0.3), 0px 4px 8px 3px rgba(0, 0, 0, 0.15);
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-hover: var(--shadow-3);
 }
 
-.theme-dark {
+[data-theme='dark'] {
   --bg: #192028;
   --bg-surface: #1e2830;
   --bg-elevated: #243742;
@@ -37,12 +57,20 @@
   --text-muted: #8fa3b0;
   --text-dim: #5f7885;
   --accent: #5d8da8;
+  --accent-hover: #6d9db8;
   --accent-dim: #4a7a96;
   --green: #3fb950;
+  --green-dim: rgba(63, 185, 80, 0.15);
   --yellow: #d29922;
+  --yellow-dim: rgba(210, 153, 34, 0.15);
   --orange: #db6d28;
+  --orange-dim: rgba(219, 109, 40, 0.15);
   --red: #f85149;
+  --red-dim: rgba(248, 81, 73, 0.15);
   --purple: #8e9ad0;
+  --purple-dim: rgba(142, 154, 208, 0.15);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96, 165, 250, 0.15);
   --focus-ring: rgba(93, 141, 168, 0.4);
 }
 
@@ -57,31 +85,16 @@
   cursor: default;
 }
 
-.theme-light .skill-pill {
+.skill-pill {
   background: #e8f0f5;
   color: #2c5f7a;
   border: 1px solid #c8dce8;
 }
 
-.theme-dark .skill-pill {
+[data-theme='dark'] .skill-pill {
   background: #1e3a4a;
   color: #8ec8e8;
   border: 1px solid #2c5060;
-}
-
-:root {
-  --radius: 12px;
-  --radius-lg: 16px;
-  --radius-sm: 8px;
-  --sidebar-width: 240px;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --shadow-1: 0px 1px 2px 0px rgba(0, 0, 0, 0.3), 0px 1px 3px 1px rgba(0, 0, 0, 0.15);
-  --shadow-2: 0px 1px 2px 0px rgba(0, 0, 0, 0.3), 0px 2px 6px 2px rgba(0, 0, 0, 0.15);
-  --shadow-3: 0px 1px 3px 0px rgba(0, 0, 0, 0.3), 0px 4px 8px 3px rgba(0, 0, 0, 0.15);
-  --shadow-sm: var(--shadow-1);
-  --shadow-md: var(--shadow-2);
-  --shadow-hover: var(--shadow-3);
 }
 
 * {
