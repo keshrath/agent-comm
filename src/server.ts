@@ -20,6 +20,12 @@ export interface DashboardServer {
   close(): void;
 }
 
+function getCliArgAfterFlag(argv: string[], flag: string): string | undefined {
+  const i = argv.indexOf(flag);
+  if (i === -1 || i + 1 >= argv.length) return undefined;
+  return argv[i + 1];
+}
+
 export function startDashboard(ctx: AppContext, port = 3421): Promise<DashboardServer> {
   return new Promise((resolve, reject) => {
     const router = createRouter(ctx);
@@ -51,8 +57,8 @@ export function startDashboard(ctx: AppContext, port = 3421): Promise<DashboardS
 }
 
 if (process.argv[1]?.endsWith('server.js') || process.argv[1]?.endsWith('server.ts')) {
-  const port = parseInt(process.argv.find((_a, i, arr) => arr[i - 1] === '--port') ?? '3421', 10);
-  const dbPath = process.argv.find((_a, i, arr) => arr[i - 1] === '--db') ?? undefined;
+  const port = parseInt(getCliArgAfterFlag(process.argv, '--port') ?? '3421', 10);
+  const dbPath = getCliArgAfterFlag(process.argv, '--db');
   const dbOptions: DbOptions = dbPath ? { path: dbPath } : {};
 
   const ctx = createContext(dbOptions);

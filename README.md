@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-221%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-253%20passing-brightgreen)]()
 [![MCP Tools](https://img.shields.io/badge/MCP%20tools-7-purple)]()
 [![REST Endpoints](https://img.shields.io/badge/REST-29%20endpoints-orange)]()
 
@@ -213,7 +213,7 @@ The web dashboard auto-starts at **http://localhost:3421** and shows agents, mes
 ## Testing
 
 ```bash
-npm test              # 214 tests across 11 suites
+npm test              # 253 tests across 13 files
 npm run test:watch    # Watch mode
 npm run test:e2e      # E2E tests only
 npm run test:coverage # Coverage report

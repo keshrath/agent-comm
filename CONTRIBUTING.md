@@ -108,7 +108,7 @@ agent-comm/
 ## Testing
 
 ```bash
-npm test                          # Run all tests (214 across 11 suites)
+npm test                          # Run all tests (253 across 13 files)
 npm run test:watch                # Watch mode
 npm run test:e2e                  # E2E server tests only
 npm run test:coverage             # Coverage report (v8 provider)

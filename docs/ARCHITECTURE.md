@@ -6,6 +6,7 @@
 src/
 ├── types.ts              # Shared types, error hierarchy (CommError → NotFound/Conflict/Validation)
 ├── context.ts            # DI root — creates and wires all services, no global state
+├── package-meta.ts       # Reads name/version from package.json (MCP initialize, WebSocket state)
 ├── index.ts              # MCP entry point (stdio JSON-RPC) + dashboard auto-start
 ├── server.ts             # HTTP + WebSocket server (standalone or embedded)
 ├── storage/
@@ -21,7 +22,7 @@ src/
 │   ├── cleanup.ts        # Startup reset, periodic purge, manual message wipe
 │   ├── rate-limit.ts     # Per-agent token bucket rate limiter
 ├── transport/
-│   ├── mcp.ts            # 9 MCP tool definitions + dispatch + input validation
+│   ├── mcp.ts            # 7 MCP tool definitions + dispatch (handlers: mcp-handlers.ts, validation: mcp-validation.ts)
 │   ├── rest.ts           # HTTP router (node:http, zero frameworks) + static serving
 │   └── ws.ts             # WebSocket: real-time push, ping/pong, event filtering
 └── ui/

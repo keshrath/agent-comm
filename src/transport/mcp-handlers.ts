@@ -69,12 +69,12 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       if (!Array.isArray(rawSkills)) {
         throw new ValidationError('"skills" must be an array.');
       }
-      for (const s of rawSkills) {
+      for (const rawSkill of rawSkills) {
         if (
-          typeof s !== 'object' ||
-          !s ||
-          typeof (s as Record<string, unknown>).id !== 'string' ||
-          typeof (s as Record<string, unknown>).name !== 'string'
+          typeof rawSkill !== 'object' ||
+          !rawSkill ||
+          typeof (rawSkill as Record<string, unknown>).id !== 'string' ||
+          typeof (rawSkill as Record<string, unknown>).name !== 'string'
         ) {
           throw new ValidationError('Each skill must have "id" (string) and "name" (string).');
         }
@@ -90,10 +90,10 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
         const rawCh = args.channels;
         const joined: string[] = [];
         if (Array.isArray(rawCh) && rawCh.every((c) => typeof c === 'string')) {
-          for (const ch of rawCh as string[]) {
-            const channel = ctx.channels.create(ch, existing.id);
-            ctx.channels.join(channel.id, existing.id);
-            joined.push(ch);
+          for (const channelName of rawCh as string[]) {
+            const createdChannel = ctx.channels.create(channelName, existing.id);
+            ctx.channels.join(createdChannel.id, existing.id);
+            joined.push(channelName);
           }
         }
         return joined.length > 0 ? { ...existing, joined_channels: joined } : existing;
@@ -122,11 +122,16 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       if (!Array.isArray(rawChannels) || !rawChannels.every((c) => typeof c === 'string')) {
         throw new ValidationError('"channels" must be an array of strings.');
       }
-      for (const ch of rawChannels as string[]) {
-        const channel = ctx.channels.create(ch, registered.id);
-        ctx.channels.join(channel.id, registered.id);
-        ctx.feed.logInternal(registered.id, 'channel_join', ch, registered.name + ' joined #' + ch);
-        joinedChannels.push(ch);
+      for (const channelName of rawChannels as string[]) {
+        const createdChannel = ctx.channels.create(channelName, registered.id);
+        ctx.channels.join(createdChannel.id, registered.id);
+        ctx.feed.logInternal(
+          registered.id,
+          'channel_join',
+          channelName,
+          registered.name + ' joined #' + channelName,
+        );
+        joinedChannels.push(channelName);
       }
     }
 
@@ -254,17 +259,21 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
 
     // --- Broadcast mode ---
     if (broadcast) {
-      const msgs = ctx.messages.broadcast(self.id, content, optImportance(args, 'importance'));
+      const broadcastMessages = ctx.messages.broadcast(
+        self.id,
+        content,
+        optImportance(args, 'importance'),
+      );
       ctx.agents.touchActivity(self.id);
       ctx.feed.logInternal(self.id, 'message', 'broadcast', content.substring(0, 100));
-      return { sent: msgs.length, messages: msgs };
+      return { sent: broadcastMessages.length, messages: broadcastMessages };
     }
 
     // --- Channel mode ---
     if (channel) {
       const channelId = agent.resolveChannel(channel);
       agent.requireChannelMember(channelId, self.id);
-      const chanMsg = ctx.messages.send(self.id, {
+      const channelMessage = ctx.messages.send(self.id, {
         channel: channelId,
         content,
         thread_id: optNumber(args, 'thread_id'),
@@ -272,13 +281,13 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       });
       ctx.agents.touchActivity(self.id);
       ctx.feed.logInternal(self.id, 'message', channel, content.substring(0, 100));
-      return chanMsg;
+      return channelMessage;
     }
 
     // --- Direct message mode ---
     if (to) {
       const target = agent.resolve(to);
-      const msg = ctx.messages.send(self.id, {
+      const sentMessage = ctx.messages.send(self.id, {
         to: target.id,
         content,
         thread_id: optNumber(args, 'thread_id'),
@@ -286,8 +295,13 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
         ack_required: optBoolean(args, 'ack_required'),
       });
       ctx.agents.touchActivity(self.id);
-      ctx.feed.logInternal(self.id, 'message', target.name, (msg.content || '').substring(0, 100));
-      return msg;
+      ctx.feed.logInternal(
+        self.id,
+        'message',
+        target.name,
+        (sentMessage.content || '').substring(0, 100),
+      );
+      return sentMessage;
     }
 
     throw new ValidationError(
@@ -329,20 +343,30 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       case 'join': {
         const self = agent.require();
         ctx.rateLimiter.check(self.id);
-        const ch = requireString(args, 'channel');
-        const channelId = agent.resolveChannel(ch);
+        const channelName = requireString(args, 'channel');
+        const channelId = agent.resolveChannel(channelName);
         ctx.channels.join(channelId, self.id);
-        ctx.feed.logInternal(self.id, 'channel_join', ch, self.name + ' joined #' + ch);
-        return { success: true, channel: ch };
+        ctx.feed.logInternal(
+          self.id,
+          'channel_join',
+          channelName,
+          self.name + ' joined #' + channelName,
+        );
+        return { success: true, channel: channelName };
       }
 
       case 'leave': {
         const self = agent.require();
-        const ch = requireString(args, 'channel');
-        const channelId = agent.resolveChannel(ch);
+        const channelName = requireString(args, 'channel');
+        const channelId = agent.resolveChannel(channelName);
         ctx.channels.leave(channelId, self.id);
-        ctx.feed.logInternal(self.id, 'channel_leave', ch, self.name + ' left #' + ch);
-        return { success: true, channel: ch };
+        ctx.feed.logInternal(
+          self.id,
+          'channel_leave',
+          channelName,
+          self.name + ' left #' + channelName,
+        );
+        return { success: true, channel: channelName };
       }
 
       case 'archive': {

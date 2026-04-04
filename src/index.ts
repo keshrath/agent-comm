@@ -9,17 +9,18 @@
 
 import { createInterface } from 'readline';
 import { createContext } from './context.js';
+import { readPackageMeta } from './package-meta.js';
 import { tools, createToolHandler } from './transport/mcp.js';
 import { startDashboard, type DashboardServer } from './server.js';
 import { CommError } from './types.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
 
-const SERVER_INFO = { name: 'agent-comm', version: '1.0.0' };
+const SERVER_INFO = readPackageMeta();
 const CAPABILITIES = { tools: {} };
 const DASHBOARD_PORT = parseInt(process.env.AGENT_COMM_PORT ?? '3421', 10);
 
-const ctx = createContext();
-const handleTool = createToolHandler(ctx);
+const appContext = createContext();
+const handleTool = createToolHandler(appContext);
 
 let dashboard: DashboardServer | null = null;
 let dashboardAttempted = false;
@@ -27,9 +28,9 @@ let dashboardAttempted = false;
 function tryStartDashboard(): void {
   if (dashboard || dashboardAttempted) return;
   dashboardAttempted = true;
-  startDashboard(ctx, DASHBOARD_PORT)
-    .then((d) => {
-      dashboard = d;
+  startDashboard(appContext, DASHBOARD_PORT)
+    .then((dashboardServer) => {
+      dashboard = dashboardServer;
     })
     .catch(() => {
       process.stderr.write(
@@ -38,7 +39,7 @@ function tryStartDashboard(): void {
     });
 }
 
-function send(response: JsonRpcResponse): void {
+function writeJsonRpcResponse(response: JsonRpcResponse): void {
   process.stdout.write(JSON.stringify(response) + '\n');
 }
 
@@ -106,21 +107,25 @@ function handleRequest(request: JsonRpcRequest): JsonRpcResponse | null {
   }
 }
 
-const rl = createInterface({ input: process.stdin, terminal: false });
+const stdioReadline = createInterface({ input: process.stdin, terminal: false });
 
-rl.on('line', (line: string) => {
+stdioReadline.on('line', (line: string) => {
   if (!line.trim()) return;
   try {
     const request = JSON.parse(line) as JsonRpcRequest;
     const response = handleRequest(request);
-    if (response) send(response);
+    if (response) writeJsonRpcResponse(response);
   } catch (err) {
     process.stderr.write(
       '[agent-comm] JSON-RPC parse error: ' +
         (err instanceof Error ? err.message : String(err)) +
         '\n',
     );
-    send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    writeJsonRpcResponse({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32700, message: 'Parse error' },
+    });
   }
 });
 
@@ -129,7 +134,7 @@ function cleanup(): void {
     dashboard.close();
     dashboard = null;
   }
-  ctx.close();
+  appContext.close();
 }
 
 process.on('SIGINT', () => {

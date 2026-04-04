@@ -292,9 +292,9 @@ export function createToolHandler(ctx: AppContext): ToolHandler {
       throw new NotFoundError('Agent', nameOrId);
     },
     resolveChannel(name: string) {
-      const ch = ctx.channels.getByName(name);
-      if (!ch) throw new NotFoundError('Channel', name);
-      return ch.id;
+      const channel = ctx.channels.getByName(name);
+      if (!channel) throw new NotFoundError('Channel', name);
+      return channel.id;
     },
     requireChannelMember(channelId: string, agentId: string) {
       if (!ctx.channels.isMember(channelId, agentId)) {

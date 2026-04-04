@@ -8,23 +8,10 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import type { AppContext } from '../context.js';
+import { readPackageMeta } from '../package-meta.js';
 
-const __ws_dirname = dirname(fileURLToPath(import.meta.url));
-let pkg: { version: string };
-try {
-  pkg = JSON.parse(readFileSync(join(__ws_dirname, '..', '..', 'package.json'), 'utf8'));
-} catch (err) {
-  process.stderr.write(
-    '[agent-comm] Failed to read package.json: ' +
-      (err instanceof Error ? err.message : String(err)) +
-      '\n',
-  );
-  pkg = { version: '0.0.0' };
-}
+const packageMeta = readPackageMeta();
 
 const MAX_WS_MESSAGE_SIZE = 4096;
 const MAX_WS_CONNECTIONS = 50;
@@ -64,8 +51,8 @@ export function setupWebSocket(httpServer: Server, ctx: AppContext): WebSocketHa
     sendFullState(ws, ctx, clients);
 
     ws.on('pong', () => {
-      const s = clients.get(ws);
-      if (s) s.alive = true;
+      const clientState = clients.get(ws);
+      if (clientState) clientState.alive = true;
     });
 
     ws.on('message', (raw: Buffer) => {
@@ -248,7 +235,7 @@ function sendFullState(ws: WebSocket, ctx: AppContext, clients: Map<WebSocket, C
     ws.send(
       JSON.stringify({
         type: 'state',
-        version: pkg.version,
+        version: packageMeta.version,
         agents: getAgentsData(ctx),
         channels: getChannelsData(ctx),
         messages: getMessagesData(ctx),
@@ -309,7 +296,7 @@ function sendDelta(
     ws.send(
       JSON.stringify({
         type: 'state',
-        version: pkg.version,
+        version: packageMeta.version,
         delta: true,
         ...changed,
       }),
