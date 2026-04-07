@@ -1,23 +1,18 @@
 // =============================================================================
 // agent-comm — Cleanup service
 //
-// Purges stale data to prevent unbounded growth:
-// - Offline agents older than retention period
-// - Messages older than retention period
-// - Read receipts for deleted messages
-// - Archived channels older than retention period
-//
-// Also handles startup reset: marks all agents offline and purges stale
-// session data so the dashboard never shows ghosts from previous runs.
+// Extends agent-common's CleanupService base for timer scheduling and
+// resetOnStartup hook. Adds agent-comm specific purge methods for messages,
+// offline agents, stale associated data, and nuclear purgeEverything.
 // =============================================================================
 
+import { CleanupService as KitCleanupService } from 'agent-common';
 import type { Db } from '../storage/database.js';
 
 const DEFAULT_RETENTION_DAYS = 7;
 const DEFAULT_FEED_RETENTION_DAYS = 30;
-const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
-export interface CleanupStats {
+export interface CleanupStats extends Record<string, number> {
   agents: number;
   messages: number;
   reads: number;
@@ -30,16 +25,16 @@ export interface StaleCleanupStats extends CleanupStats {
   memberships: number;
 }
 
-export class CleanupService {
-  private timer: ReturnType<typeof setInterval> | null = null;
+export class CleanupService extends KitCleanupService<CleanupStats> {
+  private readonly feedRetentionDays: number;
 
   constructor(
-    private readonly db: Db,
-    private readonly retentionDays: number = DEFAULT_RETENTION_DAYS,
-    private readonly feedRetentionDays: number = DEFAULT_FEED_RETENTION_DAYS,
+    db: Db,
+    retentionDays: number = DEFAULT_RETENTION_DAYS,
+    feedRetentionDays: number = DEFAULT_FEED_RETENTION_DAYS,
   ) {
-    this.resetOnStartup();
-    this.startTimer();
+    super(db, { retentionDays });
+    this.feedRetentionDays = feedRetentionDays;
   }
 
   /**
@@ -57,7 +52,7 @@ export class CleanupService {
   /** Mark stale agents offline on server start.
    *  Only affects agents whose heartbeat is older than 2 minutes —
    *  avoids clobbering agents registered by other processes (MCP). */
-  resetOnStartup(): void {
+  override resetOnStartup(): void {
     const marked = this.db.run(
       `UPDATE agents SET status = 'offline'
        WHERE status != 'offline'
@@ -199,33 +194,5 @@ export class CleanupService {
     );
 
     return { agents, messages, reads, channels, state, feed_events };
-  }
-
-  /** Run full cleanup immediately and return stats. */
-  purgeAll(): CleanupStats {
-    return this.run();
-  }
-
-  stopTimer(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  private startTimer(): void {
-    this.run();
-    this.timer = setInterval(() => {
-      try {
-        this.run();
-      } catch (err) {
-        process.stderr.write(
-          '[agent-comm] Cleanup timer error: ' +
-            (err instanceof Error ? err.message : String(err)) +
-            '\n',
-        );
-      }
-    }, CLEANUP_INTERVAL_MS);
-    this.timer.unref();
   }
 }
