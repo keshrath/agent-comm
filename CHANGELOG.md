@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.18] - 2026-04-07
+
+### Added
+
+- **State TTL — fully wired through every transport.** `state.set()` accepts an optional `ttl_seconds` parameter. Entries with a TTL are lazy-deleted on the next `get` / `list`. Now exposed at all three transport layers:
+  - **MCP**: `comm_state { action: "set", ttl_seconds: 600, ... }` — agents can claim playwright/file locks that auto-release if the agent dies.
+  - **REST**: `POST /api/state/:namespace/:key` accepts `ttl_seconds` in the body.
+  - **Service**: `StateService.set(ns, key, value, agentId, ttlSeconds?)` — programmatic callers.
+- Schema **v5**: `state.expires_at` column + partial index `idx_state_expires` (only indexes rows with a non-null expiry).
+- New `expires_at` field on `StateEntry`.
+- 5 new TTL tests (suite is now 258, was 251).
+
+### Fixed
+
+- Removed duplicate `expires_at` column declaration that briefly appeared in both V1 and V5 migrations during development. Fresh DBs and existing DBs both initialize cleanly now.
+- `agent-desk-plugin.json` and `server.json` re-aligned to 1.2.18 (had silently lagged at 1.2.17).
+
+### Schema contract (consumers, beware)
+
+The `agents` table is read directly by external consumers (e.g. the global Claude Code statusline
+script at `~/.claude/statusline-command.js` which queries
+`SELECT name FROM agents WHERE status = 'online' ORDER BY last_heartbeat DESC LIMIT 1`).
+**Do NOT rename `agents.name`, `agents.status`, or `agents.last_heartbeat` without bumping the major
+version and updating the statusline.** If you must rename, add a backward-compat view first.
+
 ## [1.2.17] - 2026-04-03
 
 ### Added

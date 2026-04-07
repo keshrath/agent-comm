@@ -387,12 +387,15 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     const body = await readBody(req);
     const value = body.value as string | undefined;
     const updatedBy = body.updated_by as string | undefined;
+    const ttlRaw = body.ttl_seconds;
+    const ttl =
+      typeof ttlRaw === 'number' && Number.isFinite(ttlRaw) && ttlRaw > 0 ? ttlRaw : undefined;
 
     if (typeof value !== 'string') return json(res, { error: '"value" is required' }, 400);
     if (!updatedBy || typeof updatedBy !== 'string')
       return json(res, { error: '"updated_by" (agent ID) is required' }, 400);
 
-    const entry = ctx.state.set(params.namespace, params.key, value, updatedBy);
+    const entry = ctx.state.set(params.namespace, params.key, value, updatedBy, ttl);
     json(res, entry);
   });
 

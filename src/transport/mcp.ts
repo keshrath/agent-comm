@@ -197,7 +197,7 @@ export const tools: ToolDefinition[] = [
   {
     name: 'comm_state',
     description:
-      'Shared key-value state. Actions: "set", "get", "list", "delete", "cas" (atomic compare-and-swap).',
+      'Shared key-value state. Actions: "set" (optionally with ttl_seconds for auto-expiry), "get", "list", "delete", "cas" (atomic compare-and-swap). Use ttl_seconds when claiming locks (e.g. playwright instances) so a dead agent does not hold the lock forever.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -208,6 +208,11 @@ export const tools: ToolDefinition[] = [
         namespace: { type: 'string', description: 'Namespace (default: "default")' },
         key: { type: 'string', description: 'Key name (required for set/get/delete/cas)' },
         value: { type: 'string', description: '[set] Value (JSON as string if needed)' },
+        ttl_seconds: {
+          type: 'number',
+          description:
+            '[set] Optional TTL in seconds. Entries past their TTL are lazy-deleted on the next get/list. Recommended for locks.',
+        },
         expected: {
           type: ['string', 'null'],
           description: '[cas] Expected current value (null if key should not exist)',

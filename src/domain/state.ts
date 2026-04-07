@@ -19,19 +19,33 @@ export class StateService {
     private readonly events: EventBus,
   ) {}
 
-  set(namespace: string, key: string, value: string, updatedBy: string): StateEntry {
+  set(
+    namespace: string,
+    key: string,
+    value: string,
+    updatedBy: string,
+    ttlSeconds?: number,
+  ): StateEntry {
     this.validateKey(namespace, key);
     if (value.length > MAX_VALUE_LENGTH) {
       throw new ValidationError(`Value exceeds maximum length of ${MAX_VALUE_LENGTH}.`);
     }
 
+    let expiresAt: string | null = null;
+    if (ttlSeconds !== undefined && ttlSeconds !== null) {
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+        throw new ValidationError('ttl_seconds must be a positive number.');
+      }
+      expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    }
+
     this.db.run(
-      `INSERT INTO state (namespace, key, value, updated_by)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO state (namespace, key, value, updated_by, expires_at)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (namespace, key)
        DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by,
-                     updated_at = datetime('now')`,
-      [namespace, key, value, updatedBy],
+                     updated_at = datetime('now'), expires_at = excluded.expires_at`,
+      [namespace, key, value, updatedBy, expiresAt],
     );
 
     const entry = this.get(namespace, key)!;
@@ -40,13 +54,20 @@ export class StateService {
   }
 
   get(namespace: string, key: string): StateEntry | null {
+    this.expireSweep();
     return this.db.queryOne<StateEntry>(`SELECT * FROM state WHERE namespace = ? AND key = ?`, [
       namespace,
       key,
     ]);
   }
 
+  /** Lazy-delete expired entries. Cheap: hits the partial index on expires_at. */
+  private expireSweep(): void {
+    this.db.run(`DELETE FROM state WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')`);
+  }
+
   list(namespace?: string, prefix?: string): StateEntry[] {
+    this.expireSweep();
     let sql = `SELECT * FROM state WHERE 1=1`;
     const params: unknown[] = [];
 

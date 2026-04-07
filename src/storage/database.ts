@@ -26,7 +26,7 @@ export interface Db {
   close(): void;
 }
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export function createDb(options: DbOptions = {}): Db {
   const dbPath = resolveDbPath(options.path);
@@ -98,6 +98,7 @@ function applySchema(db: Database.Database): void {
   if (currentVersion < 2) migrateV2(db);
   if (currentVersion < 3) migrateV3(db);
   if (currentVersion < 4) migrateV4(db);
+  if (currentVersion < 5) migrateV5(db);
 
   db.prepare(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`).run(
     String(SCHEMA_VERSION),
@@ -254,5 +255,13 @@ function migrateV4(db: Database.Database): void {
 
     -- Last activity tracking for stuck detection
     ALTER TABLE agents ADD COLUMN last_activity TEXT;
+  `);
+}
+
+function migrateV5(db: Database.Database): void {
+  db.exec(`
+    -- TTL support for shared state entries (nullable; null = never expires)
+    ALTER TABLE state ADD COLUMN expires_at TEXT;
+    CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at) WHERE expires_at IS NOT NULL;
   `);
 }

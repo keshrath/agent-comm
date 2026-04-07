@@ -106,6 +106,8 @@ export interface StateEntry {
   readonly value: string;
   readonly updated_by: string;
   readonly updated_at: string;
+  /** ISO timestamp; null/undefined means never expires. Lazy-deleted on read. */
+  readonly expires_at?: string | null;
 }
 
 // ---------------------------------------------------------------------------

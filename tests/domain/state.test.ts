@@ -14,6 +14,50 @@ describe('StateService', () => {
     ctx.close();
   });
 
+  describe('TTL', () => {
+    it('sets expires_at when ttl_seconds is provided', () => {
+      const before = Date.now();
+      const entry = ctx.state.set('locks', 'playwright', 'agent-A', agentId, 60);
+      expect(entry.expires_at).toBeTruthy();
+      const expiresAt = new Date(entry.expires_at!).getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(before + 55_000);
+      expect(expiresAt).toBeLessThanOrEqual(before + 65_000);
+    });
+
+    it('does not set expires_at when ttl_seconds is omitted', () => {
+      const entry = ctx.state.set('default', 'forever', 'value', agentId);
+      expect(entry.expires_at ?? null).toBeNull();
+    });
+
+    it('lazy-deletes expired entries on get', () => {
+      ctx.db.run(
+        `INSERT INTO state (namespace, key, value, updated_by, expires_at)
+         VALUES ('locks', 'stale', 'agent-X', ?, datetime('now', '-10 seconds'))`,
+        [agentId],
+      );
+      const fetched = ctx.state.get('locks', 'stale');
+      expect(fetched).toBeNull();
+    });
+
+    it('lazy-deletes expired entries on list', () => {
+      ctx.db.run(
+        `INSERT INTO state (namespace, key, value, updated_by, expires_at)
+         VALUES ('locks', 'fresh', 'a', ?, datetime('now', '+1 hour')),
+                ('locks', 'expired', 'b', ?, datetime('now', '-1 hour'))`,
+        [agentId, agentId],
+      );
+      const all = ctx.state.list('locks');
+      const keys = all.map((e) => e.key);
+      expect(keys).toContain('fresh');
+      expect(keys).not.toContain('expired');
+    });
+
+    it('rejects non-positive ttl_seconds', () => {
+      expect(() => ctx.state.set('default', 'k', 'v', agentId, 0)).toThrow('positive');
+      expect(() => ctx.state.set('default', 'k', 'v', agentId, -5)).toThrow('positive');
+    });
+  });
+
   describe('set / get', () => {
     it('stores and retrieves a value', () => {
       ctx.state.set('default', 'key1', 'value1', agentId);

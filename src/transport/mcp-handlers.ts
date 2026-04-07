@@ -411,11 +411,15 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       case 'set': {
         const self = agent.require();
         ctx.rateLimiter.check(self.id);
+        const ttlRaw = args.ttl_seconds;
+        const ttl =
+          typeof ttlRaw === 'number' && Number.isFinite(ttlRaw) && ttlRaw > 0 ? ttlRaw : undefined;
         const entry = ctx.state.set(
           optString(args, 'namespace') ?? 'default',
           requireString(args, 'key'),
           requireString(args, 'value'),
           self.id,
+          ttl,
         );
         ctx.agents.touchActivity(self.id);
         ctx.feed.logInternal(
