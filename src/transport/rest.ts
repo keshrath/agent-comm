@@ -6,23 +6,20 @@
 // =============================================================================
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, realpathSync } from 'fs';
-import { join, extname, resolve, dirname } from 'path';
+import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
+import {
+  json,
+  readBody as kitReadBody,
+  serveStatic,
+  KitError,
+  ValidationError as KitValidationError,
+} from 'agent-common';
 import type { AppContext } from '../context.js';
 import { CommError, ValidationError } from '../types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const MIME_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-};
 
 type RouteHandler = (
   req: IncomingMessage,
@@ -48,15 +45,6 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
       return '([^/]+)';
     });
     routes.push({ method, pattern: new RegExp(`^${pattern}$`), paramNames, handler });
-  }
-
-  function json(res: ServerResponse, data: unknown, status = 200): void {
-    res.writeHead(status, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'X-Content-Type-Options': 'nosniff',
-    });
-    res.end(JSON.stringify(data));
   }
 
   // -----------------------------------------------------------------------
@@ -266,40 +254,15 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   // POST endpoints for mutations
   // -----------------------------------------------------------------------
 
-  /** Read JSON body from a POST/PUT request */
-  function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
-    return new Promise((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      let size = 0;
-      const MAX_BODY = 64 * 1024;
-      req.on('data', (chunk: Buffer) => {
-        size += chunk.length;
-        if (size > MAX_BODY) {
-          reject(new ValidationError('Request body too large'));
-          req.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      });
-      req.on('end', () => {
-        try {
-          const body = JSON.parse(Buffer.concat(chunks).toString());
-          if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-            reject(new ValidationError('Request body must be a JSON object'));
-          } else {
-            resolve(body as Record<string, unknown>);
-          }
-        } catch (err) {
-          process.stderr.write(
-            '[agent-comm] Request body parse error: ' +
-              (err instanceof Error ? err.message : String(err)) +
-              '\n',
-          );
-          reject(new ValidationError('Invalid JSON in request body'));
-        }
-      });
-      req.on('error', reject);
-    });
+  async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+    try {
+      return await kitReadBody(req);
+    } catch (err) {
+      if (err instanceof KitValidationError) {
+        throw new ValidationError(err.message);
+      }
+      throw err;
+    }
   }
 
   /** Validate and send a message from body fields on behalf of a resolved sender. */
@@ -492,6 +455,8 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
       } catch (err) {
         if (err instanceof CommError) {
           json(res, { error: err.message, code: err.code }, err.statusCode);
+        } else if (err instanceof KitError) {
+          json(res, { error: err.message, code: err.code }, err.statusCode);
         } else {
           process.stderr.write(
             '[agent-comm] REST handler error: ' +
@@ -511,92 +476,4 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
 
     serveStatic(res, uiDir, pathname === '/' ? '/index.html' : pathname);
   };
-}
-
-function serveStatic(res: ServerResponse, baseDir: string, pathname: string): void {
-  // Decode percent-encoded characters first to catch encoded traversal attempts (%2e%2e, %00)
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(pathname);
-  } catch (err) {
-    process.stderr.write(
-      '[agent-comm] URI decode error: ' + (err instanceof Error ? err.message : String(err)) + '\n',
-    );
-    res.writeHead(400);
-    res.end('Bad request');
-    return;
-  }
-
-  if (decoded.includes('\0') || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(decoded)) {
-    res.writeHead(400);
-    res.end('Bad request');
-    return;
-  }
-
-  let realBase: string;
-  try {
-    realBase = realpathSync(baseDir);
-  } catch (err) {
-    process.stderr.write(
-      '[agent-comm] Static base dir resolve error: ' +
-        (err instanceof Error ? err.message : String(err)) +
-        '\n',
-    );
-    res.writeHead(404);
-    res.end('Not found');
-    return;
-  }
-
-  const filePath = resolve(join(baseDir, decoded));
-  if (!filePath.startsWith(realBase)) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
-
-  let realFilePath: string;
-  try {
-    realFilePath = realpathSync(filePath);
-  } catch (err) {
-    process.stderr.write(
-      '[agent-comm] Static file resolve error: ' +
-        (err instanceof Error ? err.message : String(err)) +
-        '\n',
-    );
-    realFilePath = filePath;
-  }
-
-  if (!realFilePath.startsWith(realBase)) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
-
-  try {
-    const content = readFileSync(realFilePath);
-    const ext = extname(realFilePath);
-    const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
-    res.end(content);
-  } catch (err) {
-    process.stderr.write(
-      '[agent-comm] Static file read error: ' +
-        (err instanceof Error ? err.message : String(err)) +
-        '\n',
-    );
-    try {
-      const indexPath = join(baseDir, 'index.html');
-      const indexContent = readFileSync(indexPath);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(indexContent);
-    } catch (fallbackErr) {
-      process.stderr.write(
-        '[agent-comm] Static index fallback error: ' +
-          (fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)) +
-          '\n',
-      );
-      res.writeHead(404);
-      res.end('Not found');
-    }
-  }
 }
