@@ -1,72 +1,11 @@
 // =============================================================================
 // agent-comm — Event bus
 //
-// In-process pub/sub for real-time notifications. The transport layer
-// (WebSocket, SSE) subscribes to events and pushes them to connected clients.
+// Thin extension of agent-common's generic EventBus, parameterized to the
+// agent-comm event vocabulary defined in ../types.ts.
 // =============================================================================
 
-import type { EventType, CommEvent } from '../types.js';
+import { EventBus as KitEventBus } from 'agent-common';
+import type { EventType } from '../types.js';
 
-type EventHandler = (event: CommEvent) => void;
-
-export class EventBus {
-  private readonly listeners = new Map<EventType | '*', Set<EventHandler>>();
-
-  emit(type: EventType, data: Record<string, unknown> = {}): void {
-    const event: CommEvent = {
-      type,
-      timestamp: new Date().toISOString(),
-      data,
-    };
-
-    const specific = this.listeners.get(type);
-    if (specific) {
-      for (const handler of specific) {
-        try {
-          handler(event);
-        } catch (err) {
-          process.stderr.write(
-            '[agent-comm] Event listener error (' +
-              type +
-              '): ' +
-              (err instanceof Error ? err.message : String(err)) +
-              '\n',
-          );
-        }
-      }
-    }
-
-    const wildcards = this.listeners.get('*');
-    if (wildcards) {
-      for (const handler of wildcards) {
-        try {
-          handler(event);
-        } catch (err) {
-          process.stderr.write(
-            '[agent-comm] Wildcard listener error (' +
-              type +
-              '): ' +
-              (err instanceof Error ? err.message : String(err)) +
-              '\n',
-          );
-        }
-      }
-    }
-  }
-
-  on(type: EventType | '*', handler: EventHandler): () => void {
-    let set = this.listeners.get(type);
-    if (!set) {
-      set = new Set();
-      this.listeners.set(type, set);
-    }
-    set.add(handler);
-    return () => {
-      set.delete(handler);
-    };
-  }
-
-  removeAll(): void {
-    this.listeners.clear();
-  }
-}
+export class EventBus extends KitEventBus<EventType> {}
