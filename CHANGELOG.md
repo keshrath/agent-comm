@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.19] - 2026-04-07
+
+### Added
+
+- **Dedicated `feed_events` retention** with its own configurable horizon. The activity feed table grows on every MCP call and used to piggy-back on the global 7-day retention; it now has its own default of 30 days, configurable via `AGENT_COMM_FEED_RETENTION_DAYS` (clamped 1-3650). New `CleanupService.cleanupFeedEvents(maxAgeDays?)` method, used inside `run()` and exposed via `POST /api/cleanup/feed`.
+- **Schema-contract test** at `tests/storage/schema-contract.test.ts`. Locks down the columns the global Claude Code statusline reads (`agents.name`, `agents.status`, `agents.last_heartbeat`) by running the exact statusline query and asserting via `PRAGMA table_info`. Renaming any of these will fail loudly in CI instead of silently breaking the statusline.
+- `CleanupStats.feed_events` field on `run()` / `purgeEverything()` return values.
+
+### Tests
+
+- 6 new tests across the two new files. Full suite 264 passing (was 258).
+
 ## [1.2.18] - 2026-04-07
 
 ### Added

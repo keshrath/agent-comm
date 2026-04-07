@@ -14,6 +14,7 @@
 import type { Db } from '../storage/database.js';
 
 const DEFAULT_RETENTION_DAYS = 7;
+const DEFAULT_FEED_RETENTION_DAYS = 30;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface CleanupStats {
@@ -22,6 +23,7 @@ export interface CleanupStats {
   reads: number;
   channels: number;
   state: number;
+  feed_events: number;
 }
 
 export interface StaleCleanupStats extends CleanupStats {
@@ -34,9 +36,22 @@ export class CleanupService {
   constructor(
     private readonly db: Db,
     private readonly retentionDays: number = DEFAULT_RETENTION_DAYS,
+    private readonly feedRetentionDays: number = DEFAULT_FEED_RETENTION_DAYS,
   ) {
     this.resetOnStartup();
     this.startTimer();
+  }
+
+  /**
+   * Delete feed_events older than `maxAgeDays` (default: this.feedRetentionDays).
+   * The activity feed is written on every MCP call and would otherwise grow
+   * unbounded — this is the dedicated retention method for it.
+   * Returns the number of rows deleted.
+   */
+  cleanupFeedEvents(maxAgeDays: number = this.feedRetentionDays): number {
+    return this.db.run(`DELETE FROM feed_events WHERE created_at < datetime('now', ?)`, [
+      `-${maxAgeDays} days`,
+    ]).changes;
   }
 
   /** Mark stale agents offline on server start.
@@ -78,15 +93,15 @@ export class CleanupService {
       cutoff,
     ]).changes;
 
-    this.db.run(`DELETE FROM feed_events WHERE created_at < datetime('now', ?)`, [cutoff]);
+    const feed_events = this.cleanupFeedEvents();
 
-    if (agents + messages + reads + channels + state > 0) {
+    if (agents + messages + reads + channels + state + feed_events > 0) {
       process.stderr.write(
-        `[agent-comm] Cleanup: ${agents} agents, ${messages} messages, ${reads} reads, ${channels} channels, ${state} state entries purged\n`,
+        `[agent-comm] Cleanup: ${agents} agents, ${messages} messages, ${reads} reads, ${channels} channels, ${state} state, ${feed_events} feed events purged\n`,
       );
     }
 
-    return { agents, messages, reads, channels, state };
+    return { agents, messages, reads, channels, state, feed_events };
   }
 
   /** Purge all messages and reads immediately (manual wipe). */
@@ -117,7 +132,15 @@ export class CleanupService {
     );
 
     if (staleAgents.length === 0) {
-      return { agents: 0, messages: 0, reads: 0, channels: 0, state: 0, memberships: 0 };
+      return {
+        agents: 0,
+        messages: 0,
+        reads: 0,
+        channels: 0,
+        state: 0,
+        feed_events: 0,
+        memberships: 0,
+      };
     }
 
     const ids = staleAgents.map((a: { id: string }) => a.id);
@@ -156,7 +179,7 @@ export class CleanupService {
       );
     }
 
-    return { agents, messages, reads, channels, state, memberships };
+    return { agents, messages, reads, channels, state, feed_events: 0, memberships };
   }
 
   /** Purge everything: all agents, messages, channels, state, feed. */
@@ -164,7 +187,7 @@ export class CleanupService {
     this.db.run(`DELETE FROM message_reactions`);
     this.db.run(`DELETE FROM message_reads`);
     this.db.run(`DELETE FROM channel_members`);
-    this.db.run(`DELETE FROM feed_events`);
+    const feed_events = this.db.run(`DELETE FROM feed_events`).changes;
     const messages = this.db.run(`DELETE FROM messages`).changes;
     const channels = this.db.run(`DELETE FROM channels`).changes;
     const agents = this.db.run(`DELETE FROM agents`).changes;
@@ -175,7 +198,7 @@ export class CleanupService {
       `[agent-comm] Full purge: ${agents} agents, ${messages} messages, ${channels} channels, ${state} state entries\n`,
     );
 
-    return { agents, messages, reads, channels, state };
+    return { agents, messages, reads, channels, state, feed_events };
   }
 
   /** Run full cleanup immediately and return stats. */

@@ -39,12 +39,16 @@ export function createContext(dbOptions?: DbOptions): AppContext {
     365,
     Math.max(1, parseInt(process.env.AGENT_COMM_RETENTION_DAYS ?? '7', 10) || 7),
   );
+  const feedRetentionDays = Math.min(
+    3650,
+    Math.max(1, parseInt(process.env.AGENT_COMM_FEED_RETENTION_DAYS ?? '30', 10) || 30),
+  );
 
   const agents = new AgentService(db, events);
   const channels = new ChannelService(db, events);
   const messages = new MessageService(db, events);
   const state = new StateService(db, events);
-  const cleanup = new CleanupService(db, retentionDays);
+  const cleanup = new CleanupService(db, retentionDays, feedRetentionDays);
   const rateLimiter = new RateLimiter();
   const feed = new FeedService(db, events);
   const branches = new BranchService(db, events);

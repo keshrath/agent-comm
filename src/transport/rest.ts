@@ -430,6 +430,14 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     json(res, stats);
   });
 
+  route('POST', '/api/cleanup/feed', async (req, res) => {
+    const body = await readBody(req);
+    const raw = body.max_age_days;
+    const maxAgeDays = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : undefined;
+    const deleted = ctx.cleanup.cleanupFeedEvents(maxAgeDays);
+    json(res, { feed_events: deleted });
+  });
+
   route('GET', '/api/export', (_req, res) => {
     json(res, {
       exported_at: new Date().toISOString(),
