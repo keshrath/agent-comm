@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-04-08
+
+### Added — temporal coordination hooks
+
+This release addresses the **multi-terminal scenario** that the file-coord
+hook alone cannot solve: two Claude Code sessions in two terminals editing
+the same project at different times, neither aware of the other, with the
+conflict surfacing only at commit time when one session sees the other's WIP.
+
+- **`scripts/hooks/workspace-awareness.mjs`** — fires on `SessionStart`,
+  registers the session in `comm_state` namespace `workspace-agents` with the
+  workspace path, and injects context into the agent's startup banner about
+  OTHER active sessions in the same workspace plus their recent file edits.
+  The agent starts already aware that it's not alone. TTL 4 hours.
+- **`scripts/hooks/bash-guard.mjs`** — fires on `PreToolUse` matched on
+  `Bash`. Single dispatch hook with a **rules table** that intercepts
+  workspace-wide commands and checks them against the world model:
+  - `git commit` → **BLOCKS** if any staged file was recently edited by
+    another session in this workspace. Prevents the "I committed someone
+    else's WIP under my message" scenario.
+  - `git push` → **BLOCKS** with similar check on locally-changed files.
+  - `npm/pnpm/yarn install/add/remove` → **BLOCKS** if another session
+    has recent edits to `package.json` or lockfiles. Prevents lockfile
+    chaos from concurrent installs.
+  - `npm test / pnpm test / vitest / jest / pytest / cargo test / go test`
+    → **WARNS** (allows the command to run) if another session has WIP in
+    the workspace. Tests/builds may pick up incomplete changes.
+  - `npm run build / pnpm run build / yarn build / tsc / cargo build / go build`
+    → **WARNS** with the same check.
+  - `prisma migrate / rails db:migrate / alembic upgrade / knex migrate /
+drizzle-kit migrate` → **BLOCKS** if any migration files or schema
+    files were recently edited by another session.
+  - `npm run dev / pnpm dev / yarn dev / next dev / vite` → **WARNS** if
+    another session is active in the workspace (port collision risk).
+    Adding a new rule is one entry in the table inside `bash-guard.mjs`.
+    Bypass-able for emergencies via `AGENT_COMM_GUARD_BYPASS=1`.
+- **`scripts/hooks/_agent-comm-rest.mjs`** — shared library for hook scripts.
+  Centralizes REST helpers, identity resolution, age formatting, workspace
+  detection, and the file-edits / workspace-agents queries. New hooks can
+  reuse the primitives instead of duplicating boilerplate.
+
+### Removed
+
+- **Bench dashboard panel UI** (the v1.3.1 "Bench" tab). The static
+  results display didn't earn its place — the same information is in
+  `bench/README.md` in a more readable form. The `GET /api/bench` REST
+  endpoint and the `bench/_results/latest.json` file are kept for any
+  programmatic consumer.
+
+### Setup changes
+
+- `scripts/setup.js` now installs both new hooks in addition to the
+  existing five.
+- The user's `~/.claude/settings.json` is updated to wire the new hooks
+  into `SessionStart` (workspace-awareness) and `PreToolUse / Bash`
+  (bash-guard) alongside the existing entries.
+
+### Why this matters
+
+The file-coord hook (v1.3.0) operates at the **edit moment** — it prevents
+two agents from editing the same file simultaneously. But your real pain
+isn't simultaneous edits, it's **temporal overlap**: Session A edits a file
+at 14:00, Session B edits a different file at 15:00, Session A finishes
+its task at 16:00 and runs `git status`, sees Session B's WIP mixed with
+its own, has to manually figure out which changes are which, and frequently
+either commits Session B's half-done work under A's commit message or
+selectively stages and risks missing pieces.
+
+The two new hooks intervene at the moments where this manifests:
+
+- **Session start** — agent learns the workspace is shared before forming a plan
+- **Bash command time** — `git commit`, `git push`, `npm install`, etc. are
+  blocked or warned when they would conflict with another session's WIP
+
+Together they make multi-terminal Claude Code workflows on the same project
+safe by default, without requiring agents to remember to check anything.
+
 ## [1.3.1] - 2026-04-08
 
 ### Added — bench expansion

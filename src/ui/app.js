@@ -487,9 +487,6 @@
         detail.style.display = '';
       }
     }
-
-    // Bench is fetched on-demand (not part of the WS state poll).
-    if (viewName === 'bench' && AC.renderBench) AC.renderBench();
   }
 
   // Export switchView so render-messages can use it

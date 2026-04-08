@@ -112,17 +112,6 @@
               ><span class="material-symbols-outlined nav-icon">rss_feed</span>Activity</a
             >
           </li>
-          <li role="presentation">
-            <a
-              href="#bench"
-              id="tab-bench"
-              class="nav-link"
-              data-view="bench"
-              role="tab"
-              tabindex="-1"
-              ><span class="material-symbols-outlined nav-icon">speed</span>Bench</a
-            >
-          </li>
         </ul>
         <div class="sidebar-footer">
           <span class="connection-status" id="conn-status" role="status" aria-live="polite">
@@ -302,17 +291,6 @@
           </div>
           <div id="feed-list" class="feed-timeline"></div>
         </section>
-        <section id="view-bench" class="view" role="tabpanel" aria-labelledby="tab-bench">
-          <h2><span class="material-symbols-outlined view-icon">speed</span>Bench Results</h2>
-          <p class="empty-hint" id="bench-intro">
-            Coordination measurements from the agent-comm bench harness (<code
-              >npm run bench:run -- --real</code
-            >). Each pilot compares <strong>naive parallel</strong> agents against agents running
-            with the <strong>file-coord PreToolUse hook</strong> installed. Lower <code>wall</code>,
-            lower <code>cost</code>, and higher <code>units_per_dollar</code> are better.
-          </p>
-          <div id="bench-list" class="bench-list"></div>
-        </section>
       </main>
     </div>
     <div id="cleanup-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
@@ -352,7 +330,6 @@
     <script src="render-channels.js"></script>
     <script src="render-state.js"></script>
     <script src="render-feed.js"></script>
-    <script src="render-bench.js"></script>
     <script src="template.js"></script>
     <script src="app.js"></script>
   </body>

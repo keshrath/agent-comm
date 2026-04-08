@@ -148,6 +148,33 @@ if (existsSync(SETTINGS_JSON)) {
   addHook('UserPromptSubmit', checkRegHook);
   addHook('Stop', stopHook);
 
+  // workspace-awareness hook — registers this session in the workspace and
+  // injects context about other active sessions on session start. Solves the
+  // "two terminals, same project, no idea about each other" pain.
+  const workspaceAwarenessHook = {
+    type: 'command',
+    command: `node "${join(hookDir, 'workspace-awareness.mjs')}"`,
+    timeout: 5,
+  };
+  function addNamedHook(eventName, hook, marker) {
+    if (!settings.hooks[eventName]) settings.hooks[eventName] = [];
+    const hookGroup = settings.hooks[eventName];
+    const existing = hookGroup.find(
+      (g) => g.hooks && g.hooks.some((h) => h.command && h.command.includes(marker)),
+    );
+    if (existing) {
+      console.log(`  ${eventName} (${marker}): already configured`);
+      return;
+    }
+    if (hookGroup.length > 0 && hookGroup[0].hooks) {
+      hookGroup[0].hooks.push(hook);
+    } else {
+      hookGroup.push({ hooks: [hook] });
+    }
+    console.log(`  ${eventName}: added ${marker} hook`);
+  }
+  addNamedHook('SessionStart', workspaceAwarenessHook, 'workspace-awareness');
+
   // ----- file-coord hook (system-layer file lock enforcement) -----
   // Adds PreToolUse + PostToolUse hooks matched on Edit|Write|MultiEdit so
   // that parallel agents on the same shared file serialize via comm_state
@@ -178,6 +205,32 @@ if (existsSync(SETTINGS_JSON)) {
     });
     console.log(`  ${eventName} (${matcher}): added file-coord hook`);
   }
+
+  // bash-guard hook — single PreToolUse on Bash that intercepts commit/
+  // push/install/test/build/migrate/dev-server commands and blocks or warns
+  // when they would conflict with another session's WIP. The rules table
+  // inside scripts/hooks/bash-guard.mjs is easy to extend.
+  const bashGuardPath = join(hookDir, 'bash-guard.mjs');
+  function addBashGuardHook() {
+    if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+    const groups = settings.hooks.PreToolUse;
+    const existing = groups.find(
+      (g) =>
+        g.matcher === 'Bash' &&
+        g.hooks &&
+        g.hooks.some((h) => h.command && h.command.includes('bash-guard')),
+    );
+    if (existing) {
+      console.log('  PreToolUse (Bash): bash-guard already configured');
+      return;
+    }
+    groups.push({
+      matcher: 'Bash',
+      hooks: [{ type: 'command', command: `node "${bashGuardPath}"`, timeout: 10 }],
+    });
+    console.log('  PreToolUse (Bash): added bash-guard hook');
+  }
+  addBashGuardHook();
 
   addMatchedHook('PreToolUse', 'Edit|Write|MultiEdit', `node "${fileCoordPath}" PreToolUse`);
   addMatchedHook('PostToolUse', 'Edit|Write|MultiEdit', `node "${fileCoordPath}" PostToolUse`);
