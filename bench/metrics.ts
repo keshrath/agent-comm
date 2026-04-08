@@ -24,6 +24,12 @@ export interface AgentRun {
   wall_ms: number;
   // Whether the agent's final test suite passed (used for collision detection).
   tests_passed: boolean;
+  // Workload-specific: which named units/functions this agent successfully
+  // completed. Empty for workloads that don't track sub-units.
+  units_completed?: string[];
+  // Workload-specific: USD cost for this agent's run (if known). Falls back
+  // to an estimate if absent.
+  cost_usd?: number;
 }
 
 export interface MultiAgentRun {
@@ -191,6 +197,12 @@ export interface BenchReport {
   individual_pass_rate: number;
   /** Fraction of runs where the merged-tests proxy passed. */
   merged_pass_rate: number;
+  /** Avg unique units completed across the team (deduped). 0 if not tracked. */
+  mean_unique_units: number;
+  /** Total USD across all agents averaged across runs. 0 if not tracked. */
+  mean_total_cost_usd: number;
+  /** Headline efficiency: unique units / total dollars. 0 if cost or units missing. */
+  units_per_dollar: number;
 }
 
 export function aggregate(runs: MultiAgentRun[]): BenchReport {
@@ -206,6 +218,30 @@ export function aggregate(runs: MultiAgentRun[]): BenchReport {
       if (a.tests_passed) agentPass++;
     }
   }
+  // Per-run unique units (dedup across agents) and total cost.
+  let totalUnique = 0;
+  let totalCost = 0;
+  let costRunsCounted = 0;
+  for (const r of runs) {
+    const unique = new Set<string>();
+    let runCost = 0;
+    let anyCost = false;
+    for (const a of r.agents) {
+      for (const u of a.units_completed ?? []) unique.add(u);
+      if (typeof a.cost_usd === 'number') {
+        runCost += a.cost_usd;
+        anyCost = true;
+      }
+    }
+    totalUnique += unique.size;
+    if (anyCost) {
+      totalCost += runCost;
+      costRunsCounted++;
+    }
+  }
+  const meanUnique = totalUnique / runs.length;
+  const meanCost = costRunsCounted === 0 ? 0 : totalCost / costRunsCounted;
+  const unitsPerDollar = meanCost > 0 ? meanUnique / meanCost : 0;
   return {
     workload: runs[0].workload,
     condition: runs[0].condition,
@@ -216,5 +252,8 @@ export function aggregate(runs: MultiAgentRun[]): BenchReport {
     mean_parallelism: runs.reduce((s, r) => s + parallelismRatio(r), 0) / runs.length,
     individual_pass_rate: agentTotal === 0 ? 0 : agentPass / agentTotal,
     merged_pass_rate: runs.filter((r) => r.merged_tests_passed).length / runs.length,
+    mean_unique_units: meanUnique,
+    mean_total_cost_usd: meanCost,
+    units_per_dollar: unitsPerDollar,
   };
 }

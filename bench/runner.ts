@@ -93,11 +93,12 @@ function formatReport(r: BenchReport): string {
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
   return [
     `  ${r.condition.padEnd(16)} n=${r.n_runs}`,
+    `    unique_units           ${r.mean_unique_units.toFixed(1)}`,
+    `    total_cost_usd         $${r.mean_total_cost_usd.toFixed(3)}`,
+    `    units_per_dollar       ${r.units_per_dollar.toFixed(2)}`,
     `    file_collision_rate    ${pct(r.file_collision_rate)}`,
     `    duplicate_subgoal_rate ${pct(r.duplicate_subgoal_rate)}`,
     `    individual_pass_rate   ${pct(r.individual_pass_rate)}`,
-    `    merged_pass_rate       ${pct(r.merged_pass_rate)}`,
-    `    mean_token_overhead    ${r.mean_token_overhead.toFixed(2)}x`,
     `    mean_parallelism       ${r.mean_parallelism.toFixed(2)}x`,
   ].join('\n');
 }
@@ -124,32 +125,45 @@ async function main(): Promise<void> {
     return;
   }
 
-  // ----- Real pilot: camel-to-kebab, 2 agents, 2 conditions, 1 run -----
-  const fixtureDir = path.resolve('bench/workloads/camel-to-kebab');
+  // ----- v2 pilot: string-utils-6, forced-division-by-budget --------------
+  // 6 independent functions in 6 files. 3 agents in parallel. Budget cap is
+  // tight enough that no single agent can solve all 6 — division of labor
+  // is forced. Headline metric: unique units completed per dollar.
+  const fixtureDir = path.resolve('bench/workloads/string-utils-6');
   const driver = makeCliDriver({
     fixtureDir,
     testCmd: 'node test.js',
-    maxBudgetUsd: 0.8,
-    expectedFiles: ['camel.js', 'kebab.js'],
+    maxBudgetUsd: 0.35,
+    expectedFiles: [
+      'camel-to-kebab.js',
+      'kebab-to-camel.js',
+      'snake-to-camel.js',
+      'camel-to-snake.js',
+      'title-case.js',
+      'reverse.js',
+    ],
   });
 
   const task: WorkloadTask = {
-    task_id: 'camel-to-kebab-pilot',
-    workload: 'camel-to-kebab',
-    target: 'bench/workloads/camel-to-kebab',
+    task_id: 'string-utils-6-pilot',
+    workload: 'string-utils-6',
+    target: 'bench/workloads/string-utils-6',
     prompt:
-      'There are two TODO functions in this directory: camelToKebab in camel.js and ' +
-      'kebabToCamel in kebab.js. Implement them and verify by running `node test.js`. ' +
-      'You may implement only one if another agent is handling the other.',
+      'There are 6 TODO functions, each in its own file in this directory: ' +
+      'camel-to-kebab.js, kebab-to-camel.js, snake-to-camel.js, camel-to-snake.js, ' +
+      'title-case.js, reverse.js. Implement as many as you can within your budget. ' +
+      'Verify by running `node test.js`. ' +
+      'You are running in parallel with other agents on copies of the same fixture; ' +
+      'see the coordination instructions if any are present.',
   };
 
-  console.log('agent-comm bench (REAL driver) — pilot: camel-to-kebab, N=2, 1 run/cond');
-  console.log('Per-agent budget cap: $0.80. Worst case total: $3.20.\n');
+  console.log('agent-comm bench (REAL driver) — v2 pilot: string-utils-6, N=3, 1 run/cond');
+  console.log('Per-agent budget cap: $0.35. Worst case total: 6 agents × $0.35 = $2.10.\n');
 
   const reports = await runWorkload({
-    workload: 'camel-to-kebab',
+    workload: 'string-utils-6',
     tasks: [task],
-    n_agents: 2,
+    n_agents: 3,
     driver,
     conditions: ['control', 'bus-and-locks'],
   });

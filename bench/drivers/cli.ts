@@ -46,14 +46,41 @@ Then implement whatever the task requires and run the tests.
 `.trim();
 
 const COORDINATION_INSTRUCTION = `
-You are part of a team of agents working on this task in parallel. Use the
-agent-comm MCP tools to coordinate:
-1. Call comm_register with a unique name.
-2. Before editing any file, claim it with:
-   comm_state({ action: "set", namespace: "file-locks", key: "<filename>", value: "<your-name>", ttl_seconds: 600 })
-   First check if it is already claimed with comm_state get — if so, pick a different file.
-3. Release the lock with comm_state delete when you're done.
-Avoid duplicating work other agents are doing.
+You are one of several agents working on this directory in parallel. Other
+agents are running RIGHT NOW and will compete with you for work. Follow this
+EXACT procedure for every file before doing anything else with it.
+
+REQUIRED PROCEDURE (do not skip steps, do not improvise):
+
+STEP 1. Register yourself ONCE at the start:
+   mcp__agent-comm__comm_register with name="<unique_id>" channels=["bench"]
+
+STEP 2. List all currently-claimed files:
+   mcp__agent-comm__comm_state with action="list" namespace="file-locks"
+
+STEP 3. Pick ONE filename in this directory that is NOT in the list returned
+   by step 2. If every relevant file is already claimed, STOP — do not edit
+   any file, just write a brief note in subgoals.json saying "all claimed"
+   and exit successfully.
+
+STEP 4. Claim that file atomically:
+   mcp__agent-comm__comm_state with action="cas" namespace="file-locks"
+   key="<filename>" expected=null new="<your_unique_id>" ttl_seconds=600
+   If the cas call returns success=false, the file was claimed by another
+   agent between steps 2 and 3. Go back to STEP 2 and try a different file.
+
+STEP 5. Implement the function in that file. Run \`node test.js\` to verify.
+
+STEP 6. Release the lock:
+   mcp__agent-comm__comm_state with action="delete" namespace="file-locks"
+   key="<filename>"
+
+STEP 7. Go back to STEP 2 to look for more work. Repeat until all files are
+   claimed by other agents or your budget runs low.
+
+CRITICAL: Doing duplicated work is a FAILURE. The point is to divide the
+work — not to solve everything yourself. If another agent has already claimed
+a file, do not touch it.
 `.trim();
 
 async function copyDir(src: string, dst: string): Promise<void> {
@@ -217,14 +244,16 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
         const r = results[i];
         const files_edited = await diffEdited(opts.fixtureDir, dir);
         const subgoals = await readSubgoals(dir);
-        const tests_passed = await runTest(dir, opts.testCmd);
+        const test = await runTest(dir, opts.testCmd);
         agents.push({
           agent: `a${i}`,
           files_edited,
           subgoals,
           tokens: r.tokens,
           wall_ms: r.wall_ms,
-          tests_passed,
+          tests_passed: test.passed,
+          units_completed: test.units,
+          cost_usd: r.raw?.total_cost_usd,
         });
       }
 
@@ -254,10 +283,18 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
   };
 }
 
-function runTest(dir: string, cmd: string): Promise<boolean> {
+function runTest(dir: string, cmd: string): Promise<{ passed: boolean; units: string[] }> {
   return new Promise((resolve) => {
     const child = spawn(cmd, { cwd: dir, shell: true });
-    child.on('close', (code) => resolve(code === 0));
-    child.on('error', () => resolve(false));
+    let stdout = '';
+    child.stdout?.on('data', (d) => (stdout += d.toString()));
+    child.stderr?.on('data', () => {});
+    child.on('close', (code) => {
+      // Parse `PASSED_FNS=foo,bar,baz` line if present (workloads with units).
+      const m = /^PASSED_FNS=(.*)$/m.exec(stdout);
+      const units = m ? m[1].split(',').filter((s) => s.length > 0) : [];
+      resolve({ passed: code === 0, units });
+    });
+    child.on('error', () => resolve({ passed: false, units: [] }));
   });
 }

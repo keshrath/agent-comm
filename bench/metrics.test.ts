@@ -214,6 +214,39 @@ describe('tradeoff axes', () => {
 // Aggregate
 // ---------------------------------------------------------------------------
 
+describe('units_per_dollar headline metric', () => {
+  it('dedupes units across agents and divides by total cost', () => {
+    const run = mkRun({
+      agents: [
+        mkAgent({
+          agent: 'a',
+          units_completed: ['fnA', 'fnB'],
+          cost_usd: 0.1,
+          tests_passed: true,
+        }),
+        mkAgent({
+          agent: 'b',
+          units_completed: ['fnB', 'fnC'], // fnB is duplicate
+          cost_usd: 0.1,
+          tests_passed: true,
+        }),
+      ],
+    });
+    const r = aggregate([run]);
+    expect(r.mean_unique_units).toBe(3); // fnA, fnB, fnC — fnB deduped
+    expect(r.mean_total_cost_usd).toBeCloseTo(0.2);
+    expect(r.units_per_dollar).toBeCloseTo(15); // 3 / 0.2
+  });
+
+  it('returns 0 units_per_dollar when cost is missing', () => {
+    const run = mkRun({
+      agents: [mkAgent({ units_completed: ['fnA'], tests_passed: true })],
+    });
+    const r = aggregate([run]);
+    expect(r.units_per_dollar).toBe(0);
+  });
+});
+
 describe('aggregate', () => {
   it('produces a full report from a list of runs', () => {
     const runs = [
