@@ -50,6 +50,13 @@ export interface CliDriverOptions {
   /** When true, install the file-coord PreToolUse/PostToolUse hook in each
    * agent's --settings JSON. Forces claim-before-edit at the system layer. */
   installHook?: boolean;
+  /** When true, install the bash-guard PreToolUse hook (matched on Bash) in
+   * each agent's --settings JSON. Intercepts git commit / npm install / etc.
+   * and blocks/warns based on the world model. */
+  installBashGuard?: boolean;
+  /** When true, the driver runs `git init && git add . && git commit -m initial`
+   * in the shared dir before any agent spawns. Used by the multi-term pilot. */
+  gitInit?: boolean;
   /** Optional: per-agent prompt override. When set, agent i gets the result
    * of calling this with i (0-indexed); the task.prompt is unused. Use this
    * to assign distinct work to each agent so the bench isolates coordination
@@ -202,6 +209,8 @@ interface SpawnOptions {
   budgetUsd: number;
   withMcp: boolean;
   installHook: boolean;
+  /** When true, also install the bash-guard PreToolUse(Bash) hook. */
+  installBashGuard: boolean;
   /** Port the file-coord hook should hit (when installHook is true). */
   hookPort?: number;
   /** Output dir for per-agent settings/config files (so they don't pollute the
@@ -221,6 +230,7 @@ function spawnClaude(
       budgetUsd,
       withMcp,
       installHook,
+      installBashGuard,
       hookPort,
       scratchDir,
     } = opts;
@@ -250,31 +260,44 @@ function spawnClaude(
       );
       args.push('--mcp-config', cfgPath);
     }
-    if (installHook) {
-      // Write a per-agent settings.json that registers the file-coord hook
-      // for both PreToolUse and PostToolUse on Edit/Write/MultiEdit.
-      const hookPath = path
-        .resolve(process.cwd(), 'scripts', 'hooks', 'file-coord.mjs')
-        .replace(/\\/g, '/');
+    if (installHook || installBashGuard) {
+      // Write a per-agent settings.json that registers the requested hooks.
+      const hookDir = path.resolve(process.cwd(), 'scripts', 'hooks');
+      const fileCoordPath = path.join(hookDir, 'file-coord.mjs').replace(/\\/g, '/');
+      const bashGuardPath = path.join(hookDir, 'bash-guard.mjs').replace(/\\/g, '/');
       const settingsPath = path.join(scratchDir, `_settings-${agentName}.json`);
+      const preToolUse: Array<{
+        matcher: string;
+        hooks: Array<{ type: string; command: string; timeout?: number }>;
+      }> = [];
+      const postToolUse: Array<{
+        matcher: string;
+        hooks: Array<{ type: string; command: string; timeout?: number }>;
+      }> = [];
+      if (installHook) {
+        // 15s timeout MUST stay larger than the hook's POLL_TIMEOUT_MS
+        // (default 10s) or Claude Code kills the hook process mid-poll.
+        preToolUse.push({
+          matcher: 'Edit|Write|MultiEdit',
+          hooks: [{ type: 'command', command: `node ${fileCoordPath} PreToolUse`, timeout: 15 }],
+        });
+        postToolUse.push({
+          matcher: 'Edit|Write|MultiEdit',
+          hooks: [{ type: 'command', command: `node ${fileCoordPath} PostToolUse`, timeout: 15 }],
+        });
+      }
+      if (installBashGuard) {
+        preToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: `node ${bashGuardPath}`, timeout: 10 }],
+        });
+      }
       writeFileSync(
         settingsPath,
         JSON.stringify({
           hooks: {
-            // 15s timeout MUST stay larger than the hook's POLL_TIMEOUT_MS
-            // (default 10s) or Claude Code kills the hook process mid-poll.
-            PreToolUse: [
-              {
-                matcher: 'Edit|Write|MultiEdit',
-                hooks: [{ type: 'command', command: `node ${hookPath} PreToolUse`, timeout: 15 }],
-              },
-            ],
-            PostToolUse: [
-              {
-                matcher: 'Edit|Write|MultiEdit',
-                hooks: [{ type: 'command', command: `node ${hookPath} PostToolUse`, timeout: 15 }],
-              },
-            ],
+            ...(preToolUse.length > 0 ? { PreToolUse: preToolUse } : {}),
+            ...(postToolUse.length > 0 ? { PostToolUse: postToolUse } : {}),
           },
         }),
       );
@@ -335,7 +358,10 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
         condition === 'pipeline-claim' ||
         opts.installHook === true;
       // Hook needs the dashboard REST server running.
-      const needDashboard = opts.installHook === true || condition === 'pipeline-claim';
+      const needDashboard =
+        opts.installHook === true ||
+        opts.installBashGuard === true ||
+        condition === 'pipeline-claim';
 
       // Pipeline-claim condition: pre-seed the work queue via direct lib
       // import. Workers will atomically claim entries via cas before editing.
@@ -386,6 +412,25 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
         }
       }
 
+      // Optional: init a git repo in the shared dir before agents spawn.
+      if (opts.gitInit && opts.sharedDir && sharedAgentDir) {
+        try {
+          const { execSync } = await import('node:child_process');
+          execSync('git init -q', { cwd: sharedAgentDir, stdio: 'ignore' });
+          execSync('git config user.email bench@bench', {
+            cwd: sharedAgentDir,
+            stdio: 'ignore',
+          });
+          execSync('git config user.name bench', { cwd: sharedAgentDir, stdio: 'ignore' });
+          execSync('git add .', { cwd: sharedAgentDir, stdio: 'ignore' });
+          execSync('git commit -q -m "initial"', { cwd: sharedAgentDir, stdio: 'ignore' });
+        } catch (err) {
+          process.stderr.write(
+            `[bench] git init failed in ${sharedAgentDir}: ${(err as Error).message}\n`,
+          );
+        }
+      }
+
       // Launch agents — parallel by default, sequential if requested.
       const logDir = path.join(runRoot, '_logs');
       await fs.mkdir(logDir, { recursive: true });
@@ -410,6 +455,7 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
             budgetUsd: opts.maxBudgetUsd,
             withMcp,
             installHook: opts.installHook === true,
+            installBashGuard: opts.installBashGuard === true,
             hookPort,
             scratchDir,
           });
@@ -426,6 +472,7 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
               budgetUsd: opts.maxBudgetUsd,
               withMcp,
               installHook: opts.installHook === true,
+              installBashGuard: opts.installBashGuard === true,
               hookPort,
               scratchDir,
             }),

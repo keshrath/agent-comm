@@ -560,6 +560,208 @@ async function runWorkspaceDecision(): Promise<void> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Pilot 6: multi-term-commit — temporal coordination across terminal sessions
+// ---------------------------------------------------------------------------
+//
+// The user's actual real-world pain: Session A in terminal 1 edits two files,
+// then walks away. Session B starts in terminal 2 (same project), edits two
+// other files, runs `git commit -am "B's work"`. WITHOUT the bash-guard hook,
+// B's commit will include A's WIP because `git commit -am` stages all
+// modified files. WITH the bash-guard hook, B's commit is BLOCKED with a
+// message identifying the holder.
+//
+// The bench simulates this by spawning two agents SEQUENTIALLY in the same
+// shared dir with file-coord installed (so A's edits get recorded). The
+// hooked condition adds bash-guard to B; the naive condition does not.
+//
+// Headline metric: commit_purity = fraction of B's commits that contain ONLY
+// B's intended files (baz.js, qux.js). Without bash-guard the commit will
+// usually contain all 4 files (including foo.js, bar.js from A) — wrong
+// attribution, mixed commit. With bash-guard B is blocked, model reacts,
+// either restores A's files or stages selectively.
+
+async function runMultiTerminalCommit(): Promise<void> {
+  const fixtureDir = path.resolve('bench/workloads/multi-term');
+  const expectedFiles = ['foo.js', 'bar.js', 'baz.js', 'qux.js'];
+  const TASKS_BY_AGENT = [
+    {
+      files: ['foo.js', 'bar.js'],
+      label: 'session-A',
+      prompt:
+        'You are session-A. Implement add(a,b) in foo.js (return a + b) and ' +
+        'subtract(a,b) in bar.js (return a - b). DO NOT commit. Just edit ' +
+        'the files and stop. Another agent will commit later.',
+    },
+    {
+      files: ['baz.js', 'qux.js'],
+      label: 'session-B',
+      prompt:
+        'You are session-B. Implement multiply(a,b) in baz.js (return a * b) ' +
+        'and divide(a,b) in qux.js (return a / b). When done, run ' +
+        '`git commit -am "session-B: baz+qux"` to commit YOUR work. ' +
+        'IMPORTANT: only YOUR two files (baz.js, qux.js) should be in the commit. ' +
+        'If git commit fails or you see other files in the diff, use selective ' +
+        'staging (`git add baz.js qux.js && git commit -m "session-B: baz+qux"`) ' +
+        'so the commit contains only your files.',
+    },
+  ];
+
+  const promptForAgent = (i: number) => TASKS_BY_AGENT[i % TASKS_BY_AGENT.length].prompt;
+  const task: WorkloadTask = {
+    task_id: 'multi-term-commit-pilot',
+    workload: 'multi-term-commit',
+    target: fixtureDir,
+    prompt: 'unused — see promptForAgent',
+  };
+
+  const naive = makeCliDriver({
+    fixtureDir,
+    testCmd: 'true',
+    maxBudgetUsd: 0.6,
+    expectedFiles,
+    sharedDir: true,
+    sequentialAgents: true,
+    gitInit: true,
+    installHook: true, // file-coord installed so A's edits get recorded
+    promptForAgent,
+  });
+  const hooked = makeCliDriver({
+    fixtureDir,
+    testCmd: 'true',
+    maxBudgetUsd: 0.6,
+    expectedFiles,
+    sharedDir: true,
+    sequentialAgents: true,
+    gitInit: true,
+    installHook: true,
+    installBashGuard: true, // BOTH file-coord AND bash-guard
+    promptForAgent,
+  });
+
+  console.log('=== multi-term-commit (2 sequential agents, shared git repo) ===');
+  const naiveR = (
+    await runWorkload({
+      workload: 'multi-term-commit',
+      tasks: [task],
+      n_agents: 2,
+      driver: naive,
+      conditions: ['control'],
+      n_runs: 1,
+    })
+  )[0];
+  const naivePurity = await analyzeMultiTermCommit('naive');
+  console.log('  --- naive (no bash-guard) ---');
+  console.log(formatReport(naiveR));
+  console.log(`    commit_purity          ${naivePurity.purityLabel}`);
+  console.log(`    last_commit_files      ${naivePurity.commitFiles.join(', ') || '(no commit)'}`);
+
+  const hookedR = (
+    await runWorkload({
+      workload: 'multi-term-commit',
+      tasks: [task],
+      n_agents: 2,
+      driver: hooked,
+      conditions: ['control'],
+      n_runs: 1,
+    })
+  )[0];
+  const hookedPurity = await analyzeMultiTermCommit('hooked');
+  console.log('  --- hooked (bash-guard installed) ---');
+  console.log(formatReport(hookedR));
+  console.log(`    commit_purity          ${hookedPurity.purityLabel}`);
+  console.log(`    last_commit_files      ${hookedPurity.commitFiles.join(', ') || '(no commit)'}`);
+  console.log();
+
+  recordPilot({
+    name: 'multi-term-commit',
+    description:
+      "2 sequential agents, shared git repo. Session A edits foo+bar (no commit), Session B edits baz+qux and runs `git commit -am`. Naive condition lets B's commit include A's WIP; hooked condition blocks it.",
+    timestamp: new Date().toISOString(),
+    conditions: [
+      {
+        label: 'naive',
+        report: { ...naiveR, mean_unique_units: naivePurity.purityScore * 2 },
+      },
+      {
+        label: 'hooked',
+        report: { ...hookedR, mean_unique_units: hookedPurity.purityScore * 2 },
+      },
+    ],
+  });
+}
+
+interface PurityResult {
+  commitFiles: string[];
+  purityScore: number;
+  purityLabel: string;
+}
+
+/** Analyze the most recent multi-term-commit run dir and compute B's commit purity. */
+async function analyzeMultiTermCommit(condition: string): Promise<PurityResult> {
+  // Find the most recent shared dir for this condition. The driver names them
+  // bench-multi-term-commit-pilot-control-<timestamp>/shared/.
+  const tmpRoot =
+    process.env.AGENT_COMM_BENCH_TMP ??
+    (process.platform === 'win32' ? 'C:\\tmp\\agent-comm-bench' : '/tmp/agent-comm-bench');
+  const dirs = await import('node:fs').then((fs) =>
+    fs.readdirSync(tmpRoot, { withFileTypes: true }),
+  );
+  const matching = dirs
+    .filter((d) => d.isDirectory() && d.name.startsWith('bench-multi-term-commit-pilot-control-'))
+    .map((d) => path.join(tmpRoot, d.name))
+    .sort()
+    .reverse();
+  if (matching.length === 0) {
+    return { commitFiles: [], purityScore: 0, purityLabel: 'no run dir found' };
+  }
+  const sharedDir = path.join(matching[0], 'shared');
+  void condition;
+
+  // Run `git log --pretty=oneline | head -1` then `git show --name-only --format=` on it.
+  try {
+    const { execSync } = await import('node:child_process');
+    const log = execSync('git log --pretty=oneline', {
+      cwd: sharedDir,
+      encoding: 'utf8',
+    }).trim();
+    const lines = log.split('\n');
+    if (lines.length <= 1) {
+      // Only the initial commit — agent B never committed (likely blocked).
+      return {
+        commitFiles: [],
+        purityScore: 0,
+        purityLabel: 'B did not commit (blocked or failed)',
+      };
+    }
+    const lastCommit = lines[0].split(' ')[0];
+    const files = execSync(`git show --name-only --format= ${lastCommit}`, {
+      cwd: sharedDir,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    // Pure if it contains EXACTLY baz.js and qux.js, nothing else.
+    const expected = new Set(['baz.js', 'qux.js']);
+    const got = new Set(files);
+    const isPure = got.size === expected.size && [...expected].every((f) => got.has(f));
+    return {
+      commitFiles: files,
+      purityScore: isPure ? 1 : 0,
+      purityLabel: isPure
+        ? "PURE (B's commit contains only baz.js + qux.js)"
+        : `MIXED (B's commit contains: ${files.join(', ')})`,
+    };
+  } catch (err) {
+    return {
+      commitFiles: [],
+      purityScore: 0,
+      purityLabel: `error analyzing: ${(err as Error).message}`,
+    };
+  }
+}
+
 async function main(): Promise<void> {
   const real = process.argv.includes('--real');
 
@@ -592,6 +794,7 @@ async function main(): Promise<void> {
   if (runAll || pilotArg === 'real-codebase') await runRealCodebase();
   if (runAll || pilotArg === 'async') await runAsyncHandoff();
   if (runAll || pilotArg === 'workspace-decision') await runWorkspaceDecision();
+  if (runAll || pilotArg === 'multi-term') await runMultiTerminalCommit();
 }
 
 main().catch((e) => {

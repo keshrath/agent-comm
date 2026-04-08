@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-04-08
+
+### Added — multi-term-commit bench pilot
+
+- **`bench/workloads/multi-term`** — fixture: 4 source files (foo, bar, baz, qux),
+  each a stub function. The bench driver inits a git repo around them at run
+  time via the new `gitInit: true` option.
+- **`runMultiTerminalCommit()` pilot in `bench/runner.ts`** — directly simulates
+  the user's real-world scenario from v1.3.2:
+  - 2 sequential agents in the SAME shared dir (not parallel)
+  - Session A edits foo + bar but does NOT commit
+  - Session B then edits baz + qux and runs `git commit -am "..."`
+  - **Naive condition** (no bash-guard): B's commit will likely include A's
+    foo + bar because `git commit -am` stages all modified files
+  - **Hooked condition** (bash-guard installed): B's commit is BLOCKED with a
+    "held by session-A" message; B has to react (selective stage, restore, etc.)
+  - Headline metric: **commit_purity** — does B's commit contain ONLY baz + qux?
+  - Post-run analyzer parses `git log` + `git show --name-only` from the run dir
+- **Driver options**: `gitInit: true` initializes a git repo in the shared dir
+  before agents spawn. `installBashGuard: true` adds the bash-guard hook to
+  the per-agent settings JSON alongside (or instead of) file-coord.
+- **Run with**: `npm run bench:run -- --real --pilot=multi-term`
+
+### Why this pilot exists
+
+v1.3.2 shipped the workspace-awareness and bash-guard hooks but they were only
+unit-tested in isolation. The multi-term-commit pilot validates them
+end-to-end against real Claude subagents in a real git repo. It directly
+maps to the scenario you described: "two terminals, same project, agents
+don't know about each other, conflict surfaces at commit time." If the hook
+prevents the conflict in this pilot, it'll prevent it in your real workflow.
+
+### What it does NOT measure
+
+The pilot is one comparison, N=1, on one fixture. Statistical replication and
+larger workloads are deferred. The validation cost is bounded (~$3-4 per run)
+so re-running for variance is cheap.
+
 ## [1.3.2] - 2026-04-08
 
 ### Added — temporal coordination hooks
