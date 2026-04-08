@@ -39,17 +39,22 @@ export interface RunWorkloadOptions {
   n_agents: number;
   driver: AgentDriver;
   conditions?: MultiAgentRun['condition'][];
+  /** Number of times to run each task per condition (for variance). Default 1. */
+  n_runs?: number;
 }
 
 export async function runWorkload(opts: RunWorkloadOptions): Promise<BenchReport[]> {
   const conditions = opts.conditions ?? ['control', 'bus-only', 'bus-and-locks'];
+  const nRuns = opts.n_runs ?? 1;
   const reports: BenchReport[] = [];
 
   for (const condition of conditions) {
     const runs: MultiAgentRun[] = [];
     for (const task of opts.tasks) {
-      const run = await opts.driver.runOnce(task, opts.n_agents, condition);
-      runs.push(run);
+      for (let i = 0; i < nRuns; i++) {
+        const run = await opts.driver.runOnce(task, opts.n_agents, condition);
+        runs.push(run);
+      }
     }
     reports.push(aggregate(runs));
   }
@@ -125,47 +130,58 @@ async function main(): Promise<void> {
     return;
   }
 
-  // ----- v2 pilot: string-utils-6, forced-division-by-budget --------------
-  // 6 independent functions in 6 files. 3 agents in parallel. Budget cap is
-  // tight enough that no single agent can solve all 6 — division of labor
-  // is forced. Headline metric: unique units completed per dollar.
-  const fixtureDir = path.resolve('bench/workloads/string-utils-6');
+  // ----- v3 pilot: algos-6, harder per-unit work --------------------------
+  // 6 algorithm-tier problems in 6 files. Each function is a non-trivial
+  // implementation that requires real reasoning per case (CSV parsing, Roman
+  // numerals, LCS, email validation, number formatting, word wrap). Goal:
+  // raise per-function "real work" cost from ~$0.018 (v2 string-utils-6) to
+  // $0.05-$0.15, putting us above the v2 crossover threshold of ~$0.0625
+  // where locks should start beating duplication.
+  const fixtureDir = path.resolve('bench/workloads/algos-6');
   const driver = makeCliDriver({
     fixtureDir,
     testCmd: 'node test.js',
-    maxBudgetUsd: 0.35,
+    maxBudgetUsd: 0.8,
     expectedFiles: [
-      'camel-to-kebab.js',
-      'kebab-to-camel.js',
-      'snake-to-camel.js',
-      'camel-to-snake.js',
-      'title-case.js',
-      'reverse.js',
+      'csv-parse.js',
+      'format-number.js',
+      'word-wrap.js',
+      'roman.js',
+      'lcs.js',
+      'email-validate.js',
     ],
   });
 
   const task: WorkloadTask = {
-    task_id: 'string-utils-6-pilot',
-    workload: 'string-utils-6',
-    target: 'bench/workloads/string-utils-6',
+    task_id: 'algos-6-pilot',
+    workload: 'algos-6',
+    target: 'bench/workloads/algos-6',
     prompt:
       'There are 6 TODO functions, each in its own file in this directory: ' +
-      'camel-to-kebab.js, kebab-to-camel.js, snake-to-camel.js, camel-to-snake.js, ' +
-      'title-case.js, reverse.js. Implement as many as you can within your budget. ' +
-      'Verify by running `node test.js`. ' +
+      'csv-parse.js (parseRow), format-number.js (formatNumber), word-wrap.js ' +
+      '(wordWrap), roman.js (toRoman), lcs.js (longestCommonSubstring), ' +
+      'email-validate.js (isValidEmail). Each file contains a comment block ' +
+      'with the full spec and examples — read it before implementing. Implement ' +
+      'as many as you can within your budget. Verify by running `node test.js`. ' +
       'You are running in parallel with other agents on copies of the same fixture; ' +
-      'see the coordination instructions if any are present.',
+      'follow any coordination instructions present.',
   };
 
-  console.log('agent-comm bench (REAL driver) — v2 pilot: string-utils-6, N=3, 1 run/cond');
-  console.log('Per-agent budget cap: $0.35. Worst case total: 6 agents × $0.35 = $2.10.\n');
+  const N_RUNS = 2;
+  console.log(
+    `agent-comm bench (REAL driver) — v4: algos-6, N=3, 3 conditions, ${N_RUNS} runs/cond`,
+  );
+  console.log(
+    `Per-agent budget cap: $0.80. Worst case total: 3*3*${N_RUNS} = ${3 * 3 * N_RUNS} agents × $0.80 = $${(3 * 3 * N_RUNS * 0.8).toFixed(2)}.\n`,
+  );
 
   const reports = await runWorkload({
-    workload: 'string-utils-6',
+    workload: 'algos-6',
     tasks: [task],
     n_agents: 3,
     driver,
-    conditions: ['control', 'bus-and-locks'],
+    conditions: ['control', 'bus-and-locks', 'pipeline-claim'],
+    n_runs: N_RUNS,
   });
 
   for (const r of reports) console.log(formatReport(r), '\n');

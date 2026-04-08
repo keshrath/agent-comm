@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import type { AgentDriver, WorkloadTask } from '../runner.js';
 import type { AgentRun, MultiAgentRun } from '../metrics.js';
+import { createContext, type AppContext } from '../../src/lib.js';
 
 // Bench tmp lives OUTSIDE ~/.claude/ — Claude Code hard-blocks writes to paths
 // under its own config dir even with --permission-mode bypassPermissions.
@@ -82,6 +83,41 @@ CRITICAL: Doing duplicated work is a FAILURE. The point is to divide the
 work — not to solve everything yourself. If another agent has already claimed
 a file, do not touch it.
 `.trim();
+
+function pipelineClaimInstruction(queueNamespace: string, files: string[]): string {
+  return `
+You are a worker in a parallel team. There is a shared work queue. You must
+ONLY edit files you have successfully claimed via the queue. Editing any
+unclaimed file is a FAILURE.
+
+THE QUEUE: agent-comm namespace="${queueNamespace}". Each entry has key=<filename>
+and value="pending" or value="<worker-id>" once claimed or "done" once finished.
+
+THE FILES: ${files.join(', ')}
+
+PROCEDURE — follow exactly, do not improvise:
+
+LOOP:
+  1. Pick any file from the list above whose entry you have NOT yet seen claimed.
+  2. Atomically claim it:
+     mcp__agent-comm__comm_state action=cas namespace=${queueNamespace} key=<file>
+     expected="pending" new="<your-id>"
+  3. If success=false, that file was already claimed by someone else. Pick a
+     different file from the list and go back to step 2. If you've tried every
+     file and none are claimable, EXIT immediately — do not edit anything.
+  4. Implement the function in the file you successfully claimed.
+  5. Run \`node test.js\` to verify (it's OK if other files still throw — only
+     YOUR file needs to pass).
+  6. Mark done:
+     mcp__agent-comm__comm_state action=set namespace=${queueNamespace} key=<file>
+     value="done"
+  7. Go back to step 1.
+
+ABSOLUTE RULE: Do not edit any file you have not successfully claimed via the
+cas call in step 2. If cas returned success=false for a file, that file is
+not yours — even if you think you can implement it faster.
+`.trim();
+}
 
 async function copyDir(src: string, dst: string): Promise<void> {
   await fs.mkdir(dst, { recursive: true });
@@ -210,12 +246,26 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       const runRoot = path.join(TMP_ROOT, `bench-${runId}`);
       await fs.mkdir(runRoot, { recursive: true });
 
-      const withMcp = condition === 'bus-and-locks';
-      const promptParts = [
-        task.prompt,
-        SUBGOAL_INSTRUCTION,
-        ...(withMcp ? [COORDINATION_INSTRUCTION] : []),
-      ];
+      const withMcp = condition === 'bus-and-locks' || condition === 'pipeline-claim';
+
+      // Pipeline-claim condition: pre-seed the work queue via direct lib
+      // import. Workers will atomically claim entries via cas before editing.
+      let queueNamespace = '';
+      let seedCtx: AppContext | null = null;
+      if (condition === 'pipeline-claim') {
+        queueNamespace = `bench-q-${runId}`;
+        seedCtx = createContext();
+        for (const file of opts.expectedFiles) {
+          seedCtx.state.set(queueNamespace, file, 'pending', 'bench-driver', 3600);
+        }
+      }
+
+      const promptParts: string[] = [task.prompt, SUBGOAL_INSTRUCTION];
+      if (condition === 'bus-and-locks') {
+        promptParts.push(COORDINATION_INSTRUCTION);
+      } else if (condition === 'pipeline-claim') {
+        promptParts.push(pipelineClaimInstruction(queueNamespace, opts.expectedFiles));
+      }
       const prompt = promptParts.join('\n\n');
 
       // Prepare per-agent dirs in parallel.
@@ -270,6 +320,15 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       const overlap = [...fileToAgents.values()].some((s) => s.size >= 2);
       const allPassed = agents.every((a) => a.tests_passed);
       const merged_tests_passed = allPassed && !overlap;
+
+      // Tear down the seed context (closes the DB handle).
+      if (seedCtx) {
+        try {
+          seedCtx.close();
+        } catch {
+          /* best effort */
+        }
+      }
 
       return {
         run_id: runId,

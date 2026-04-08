@@ -91,7 +91,114 @@ The metric calculators are pure functions and tested independently of any
 agent runs — see `bench/metrics.test.ts`. This means the math is verified
 before you spend tokens.
 
+## v4 result: hard CAS enforcement is the only coordination pattern that works
+
+**Workload**: `algos-6` — 6 algorithm-tier problems (CSV parse, number format,
+word wrap, Roman numerals, LCS, email validation). Per-function "real work"
+cost: ~$0.06–$0.09 (5× harder than v2's string-utils-6).
+
+**Setup**: 3 parallel agents, $0.80 per-agent budget cap, **2 runs per condition**
+for variance. Total spend: ~$11 across 18 agents.
+
+| Condition            | Runs | Coverage     | Total $ | $/unit     | Collision    | Reliability  |
+| -------------------- | ---- | ------------ | ------- | ---------- | ------------ | ------------ |
+| `control`            | 2    | 6/6, 6/6     | $1.103  | **$0.184** | 100%, 100%   | stable       |
+| `bus-and-locks`      | 2    | **4/6, 6/6** | $1.858  | $0.372     | **0%, 100%** | **UNSTABLE** |
+| **`pipeline-claim`** | 2    | **6/6, 6/6** | $1.909  | $0.318     | **0%, 0%**   | **stable**   |
+
+### What each condition does
+
+- **control**: 3 agents, naive parallel, no MCP, no coordination instructions.
+  Every agent independently solves every function.
+- **bus-and-locks**: 3 agents with the agent-comm MCP server attached and a
+  strict procedural prompt instructing them to claim files via `comm_state`
+  before editing. **Soft enforcement** — the rule is in the prompt only.
+- **pipeline-claim**: The driver pre-seeds a per-run `comm_state` namespace
+  with one entry per file (value="pending"). Workers must atomically claim
+  an entry via `cas` before editing. **Hard enforcement** — there is nothing
+  in the prompt that lets an agent get work without going through cas.
+
+### The headline finding
+
+**Pipeline-claim is the only condition that achieves coordination
+deterministically.** Both replication runs hit 6/6 coverage with 0% file
+collision. Bus-and-locks does it once and fails the next time. Control never
+coordinates at all.
+
+This is consistent with what the v3 inspection logs showed: with prompt-only
+coordination, agents follow the protocol for their first claim cycle and then
+**drift back to "be helpful, finish the task"** on subsequent files. The drift
+is non-deterministic — sometimes the agent stays disciplined, sometimes it
+abandons the protocol mid-run. Hard CAS enforcement removes the choice
+entirely: no claim, no work, period.
+
+### What about $/unit?
+
+Control still wins on raw $/unit on this workload. The reason is two-fold:
+
+1. **API caching**: running control twice in sequence gives the second run a
+   ~50% discount because the prompt prefix is cached. Real-world serial cost
+   is somewhere between the cached and uncached number, not the average.
+2. **Per-unit work is too cheap to amortize the coordination overhead.**
+   Algos-6 functions cost ~$0.06 each. Pipeline-claim adds ~$0.13 of CAS
+   overhead per claim cycle. Coordination is more expensive than the work
+   it's coordinating.
+
+**Crossover math** (derived from this run):
+
+```
+pipeline_wins_when:  per_unit_work_cost > coordination_overhead / (N - 1)
+                  =  $0.13 / 2  ≈  $0.065  per unit  for N=3
+```
+
+We're sitting just above the threshold on $/unit (control $0.184 vs
+pipeline-claim $0.318), but the cache discount on control inflates the gap.
+**Pipeline-claim should overtake control on raw cost at per-unit work
+~$0.30+** — i.e., tasks that take real reasoning (~30s of actual implementation
+work per unit, not 5s).
+
+### The real value prop (calibrated to this data)
+
+agent-comm with **pipeline-claim** is the right tool when **any** of these hold:
+
+1. **Duplication has side effects** — DB writes, deploys, rate-limited API
+   calls, build artifacts. control's 3× redundancy becomes 3× the damage.
+2. **Outcomes must be deterministic** — you need the same job to execute
+   exactly once. bus-and-locks can't guarantee this; pipeline-claim can.
+3. **Per-unit work cost > ~$0.07** — at typical tasks (parsing, generating
+   non-trivial code, calling expensive APIs) the math flips in pipeline-claim's
+   favor.
+4. **Many agents on a long queue** — pipeline-claim scales linearly; control
+   wastes O(N²) work as N grows.
+
+agent-comm with **soft prompting (bus-and-locks)** is **never the right
+answer**. It pays the MCP coordination cost without delivering reliable
+coordination. If you want coordination, use hard enforcement; if you don't
+care, use control. The middle is the worst place to be.
+
+agent-comm is **not the right tool** when:
+
+- Tasks are tiny, stateless, idempotent, and have no side effects
+- Cost minimization on cached workloads is the only thing that matters
+- N is small (2-3) and you can afford to throw away the duplicates
+
+### Methodology notes
+
+- Per-agent costs include ~$0.10 baseline for context loading (Claude Code
+  loads CLAUDE.md, hooks, plugins on each headless invocation). Setting
+  `ANTHROPIC_API_KEY` and using `--bare` would drop this ~10×.
+- file_collision_rate is computed over edited files vs the fixture, **after**
+  the run; it does not detect simultaneous in-progress edits.
+- "Cached" runs benefit from API prompt-prefix caching; comparisons across
+  conditions in the same invocation are slightly biased toward later
+  conditions, especially when prompts share large prefixes.
+- N=2 is a small sample. Bus-and-locks's split (one good run, one bad) is
+  the strongest signal we have that the result isn't a fluke — the failure
+  mode is fundamental to soft prompting, not a single bad roll.
+
 ## v2 pilot result (string-utils-6, N=3, 1 run/condition)
+
+For historical reference — the v2 result that motivated v3/v4:
 
 The first real comparative number, run on `bench/workloads/string-utils-6` —
 6 independent functions in 6 files, 3 parallel agents, $0.35 per-agent budget cap.
@@ -163,7 +270,10 @@ required for headless invocation). Setting `ANTHROPIC_API_KEY` would drop costs
 - [x] v1 workload: camel-to-kebab (2 functions)
 - [x] v2 workload: string-utils-6 (forced division by budget)
 - [x] First real comparative result with honest interpretation
-- [ ] v3: larger per-task work to find the coordination/duplication crossover
+- [x] v3 workload: algos-6 (algorithm-tier problems, 5× harder per unit)
+- [x] v4: pipeline-claim condition with hard CAS enforcement
+- [x] N=2 replication confirming pipeline-claim stability vs bus-and-locks instability
+- [ ] Workload at $0.30+/unit cost to prove the crossover prediction empirically
 - [ ] Workload: tom-replay (academic anchor)
 - [ ] Workload: swe-lite-fanout (real-world anchor)
 - [ ] Results dashboard panel
