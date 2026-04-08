@@ -1,14 +1,14 @@
 // =============================================================================
-// Benchmark runner skeleton.
+// Bench runner — pilot dispatch + results persistence.
 //
-// Drives a workload through all four experimental cells (control, bus-only,
-// bus-and-locks) and prints the aggregated report. The agent driver itself is
-// pluggable — see AgentDriver below — so this file stays independent of how
-// subagents are actually spawned (Claude Code SDK, child process, etc.).
+// `npm run bench:run` runs the mock driver (no API spend, harness sanity check).
+// `npm run bench:run -- --real` runs the live Claude CLI driver against all
+// pilots in sequence. `--pilot=<name>` runs just one pilot.
 //
-// Wire a real driver in by passing it to runWorkload(). Until then, the
-// `mockDriver` produces deterministic synthetic data so the harness can be
-// exercised end-to-end without burning tokens.
+// Each pilot has two conditions (naive vs hooked, or naive vs pipeline-claim)
+// and writes its result to bench/_results/latest.json after running. The
+// dashboard reads that file via GET /api/bench (the UI panel was removed
+// in v1.3.2 but the endpoint stays for programmatic consumers).
 // =============================================================================
 
 import * as path from 'node:path';
@@ -92,7 +92,7 @@ export interface RunWorkloadOptions {
 }
 
 export async function runWorkload(opts: RunWorkloadOptions): Promise<BenchReport[]> {
-  const conditions = opts.conditions ?? ['control', 'bus-only', 'bus-and-locks'];
+  const conditions = opts.conditions ?? ['control'];
   const nRuns = opts.n_runs ?? 1;
   const reports: BenchReport[] = [];
 
@@ -112,27 +112,27 @@ export async function runWorkload(opts: RunWorkloadOptions): Promise<BenchReport
 
 // ---------------------------------------------------------------------------
 // Mock driver — deterministic synthetic data for harness smoke-testing
+// without burning API tokens. Distinguishes by condition so the metric
+// pipeline gets non-trivial data to aggregate.
 // ---------------------------------------------------------------------------
 
 export const mockDriver: AgentDriver = {
   async runOnce(task, n, condition) {
-    // Pretend locks reduce duplication and collisions.
-    const collide = condition !== 'bus-and-locks';
-    const dupSubgoals = condition === 'control' ? ['add parser', 'fix migration'] : [];
-
+    // pipeline-claim is the "good" condition; control collides.
+    const isCoordinated = condition === 'pipeline-claim';
     return {
       run_id: `${task.task_id}-${condition}`,
       workload: task.workload,
       condition,
       total_wall_ms: 1000,
-      merged_tests_passed: !collide,
+      merged_tests_passed: isCoordinated,
       agents: Array.from({ length: n }, (_, i) => ({
         agent: `a${i}`,
-        files_edited: collide ? ['shared.ts'] : [`file-${i}.ts`],
-        subgoals: [`unique-${i}`, ...dupSubgoals],
+        files_edited: isCoordinated ? [`file-${i}.ts`] : ['shared.ts'],
+        subgoals: [`unique-${i}`, ...(isCoordinated ? [] : ['shared-task'])],
         tokens: 1000,
         wall_ms: 1000,
-        tests_passed: !collide,
+        tests_passed: isCoordinated,
       })),
     };
   },
@@ -487,9 +487,6 @@ async function runWorkspaceDecision(): Promise<void> {
     'lcs.js',
     'email-validate.js',
   ];
-  // SAME prompt for all agents — no per-agent assignment. Agents must
-  // discover via the file system and (if hook is installed) the lock signal
-  // who is doing what.
   const promptForAgent = (i: number): string =>
     `You are agent #${i} (of 3) sharing this directory with two other parallel ` +
     `agents. There are 6 TODO functions, each in its own file: ${expectedFiles.join(', ')}. ` +
@@ -521,6 +518,20 @@ async function runWorkspaceDecision(): Promise<void> {
     installHook: true,
     promptForAgent,
   });
+  // pipeline-claim driver: pre-seeds comm_state with the 6 files as queue
+  // entries. The driver also injects pipelineClaimInstruction() into each
+  // agent's prompt (no need for per-agent task assignment — the queue IS
+  // the assignment). This is the right pattern for the workspace-decision
+  // use case: file-coord can't see decision collision, but cas-claim makes
+  // task assignment race-free at the data layer.
+  const pipelineClaim = makeCliDriver({
+    fixtureDir,
+    testCmd: 'node test.js',
+    maxBudgetUsd: 0.5,
+    expectedFiles,
+    sharedDir: true,
+    promptForAgent,
+  });
 
   console.log('=== workspace-decision (3 agents, 6 files, NO pre-assignment) ===');
   const naiveR = (
@@ -545,17 +556,30 @@ async function runWorkspaceDecision(): Promise<void> {
       n_runs: 1,
     })
   )[0];
-  console.log('  --- hooked (file-coord hook signals "held by X" on collision) ---');
+  console.log('  --- hooked (file-coord hook only) ---');
   console.log(formatReport(hookedR));
+  const pipelineR = (
+    await runWorkload({
+      workload: 'workspace-decision',
+      tasks: [task],
+      n_agents: 3,
+      driver: pipelineClaim,
+      conditions: ['pipeline-claim'],
+      n_runs: 1,
+    })
+  )[0];
+  console.log('  --- pipeline-claim (driver pre-seeds comm_state queue) ---');
+  console.log(formatReport(pipelineR));
   console.log();
   recordPilot({
     name: 'workspace-decision',
     description:
-      '3 agents in a shared workspace with 6 files and NO pre-assignment — must discover who does what',
+      '3 agents in a shared workspace with 6 files and NO pre-assignment — naive vs file-coord hook vs pipeline-claim',
     timestamp: new Date().toISOString(),
     conditions: [
       { label: 'naive', report: naiveR },
       { label: 'hooked', report: hookedR },
+      { label: 'pipeline-claim', report: pipelineR },
     ],
   });
 }

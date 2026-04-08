@@ -12,14 +12,14 @@ designed to surface both. We publish negative results alongside positive ones.
 
 ## TL;DR (current state)
 
-| Pilot                   | What it tests                                                                                                   | Hook winner?                                         |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| **`multi-term-commit`** | **2 sequential terminal sessions, A edits foo+bar (no commit), B then edits baz+qux and runs `git commit -am`** | **YES ⭐ — clean commit + 13% faster + 24% cheaper** |
-| `lost-update`           | 3 agents append to one shared `state.json` (classic race)                                                       | YES — 4× efficiency (early run; needs re-validation) |
-| `shared-routes`         | 3 agents add routes to one shared `routes.js` (pre-assigned)                                                    | YES — cheaper, faster, deterministic                 |
-| `real-codebase`         | 3 agents make interdependent edits in a small Node project                                                      | PARTIAL — cheaper, slower                            |
-| `workspace-decision`    | 3 agents in a multi-file workspace, NO pre-assignment                                                           | NO — naive can already coordinate informally         |
-| `async-handoff`         | 2 agents in sequence sharing a `comm_state` queue                                                               | YES — 5/6 cross-session continuity                   |
+| Pilot                   | What it tests                                                                                                   | Hook winner?                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **`multi-term-commit`** | **2 sequential terminal sessions, A edits foo+bar (no commit), B then edits baz+qux and runs `git commit -am`** | **YES ⭐ — clean commit + 13% faster + 24% cheaper**                       |
+| `lost-update`           | 3 agents append to one shared `state.json` (classic race)                                                       | YES — 4× efficiency (early run; needs re-validation)                       |
+| `shared-routes`         | 3 agents add routes to one shared `routes.js` (pre-assigned)                                                    | YES — cheaper, faster, deterministic                                       |
+| `real-codebase`         | 3 agents make interdependent edits in a small Node project                                                      | PARTIAL — cheaper, slower                                                  |
+| `workspace-decision`    | 3 agents in a multi-file workspace, NO pre-assignment                                                           | YES — `pipeline-claim` covers 5/6 vs 4/6 naive; `file-coord` is 32% faster |
+| `async-handoff`         | 2 agents in sequence sharing a `comm_state` queue                                                               | YES — 5/6 cross-session continuity                                         |
 
 **The headline is `multi-term-commit`** — the only pilot that directly
 tests the user-facing multi-terminal scenario the project was designed to
@@ -208,20 +208,37 @@ serialized agents don't waste tokens on confused mid-edit retries, but it's
 **3× slower** because the agents wait on each other on the shared files.
 Real-world tradeoff: pay more for speed, less for cost.
 
-### `workspace-decision` — naive often wins
+### `workspace-decision` — pipeline-claim wins on coverage, file-coord wins on speed
 
-|                  | naive  | hooked |
-| ---------------- | ------ | ------ |
-| unique functions | 6/6    | 4/6    |
-| wall time        | 57.8s  | 68.8s  |
-| total cost       | $1.269 | $1.539 |
-| units / $        | 4.73   | 2.60   |
+|                  | naive  | hooked (file-coord only) | **pipeline-claim** |
+| ---------------- | ------ | ------------------------ | ------------------ |
+| unique functions | 4/6    | 4/6                      | **5/6** ⭐         |
+| wall time        | 87.3s  | **59.7s (-32%)** ⭐      | 74.8s              |
+| total cost       | $1.361 | $1.389                   | $1.460             |
+| units / $        | 2.94   | 2.88                     | **3.42** ⭐        |
 
-When agents have a multi-file workspace and natural file ownership, naive
-parallel agents tend to distribute work informally — they read the directory
-listing, pick different files, and finish without ever colliding. The
-file-coord hook adds overhead without value here. **The hook is the wrong
-tool for this workload.**
+This pilot was previously documented as a hook loss (the v1.3.1 single-pilot
+result, plus a degraded run because of the v1.3.4 IPv4 bug). The v1.3.5
+re-run with both the bug fix AND the new `pipeline-claim` condition tells
+a different story:
+
+- **`pipeline-claim` is the right tool for task assignment.** The driver
+  pre-seeds `comm_state` with the 6 file names as queue entries; workers
+  must `cas`-claim before editing. The cas atomicity means decision
+  collision is impossible at the data layer — no two agents can claim
+  the same file. Result: 5/6 coverage and the highest units/$, vs 4/6 for
+  the alternatives.
+- **`file-coord` is still useful here for speed.** Even at the same 4/6
+  coverage as naive, the hook is **32% faster** because it eliminates the
+  "did someone else touch this?" thinking cycles when agents try to coordinate
+  informally. Less wasted thinking → less wall time, even if cost is similar.
+- **Both wins are real.** Use `pipeline-claim` when you need atomic task
+  assignment with no collision. Use `file-coord` when you want execution-time
+  speed wins from cleaner serialization. They're complementary, not competing.
+
+The previous "NO" verdict on this row was wrong. It was based on (1) the
+broken IPv4 hook silently failing on Windows and (2) not having a
+pipeline-claim condition to compare against. Both fixed in v1.3.5.
 
 ### `async-handoff` — sequential continuity works
 

@@ -1,6 +1,6 @@
 {
   "version": "1.3.1",
-  "generated_at": "2026-04-08T21:20:19.758Z",
+  "generated_at": "2026-04-08T21:37:49.959Z",
   "pilots": [
     {
       "name": "async-handoff",
@@ -201,8 +201,8 @@
     },
     {
       "name": "workspace-decision",
-      "description": "3 agents in a shared workspace with 6 files and NO pre-assignment — must discover who does what",
-      "timestamp": "2026-04-08T19:56:41.183Z",
+      "description": "3 agents in a shared workspace with 6 files and NO pre-assignment — naive vs file-coord hook vs pipeline-claim",
+      "timestamp": "2026-04-08T21:37:49.946Z",
       "conditions": [
         {
           "label": "naive",
@@ -212,14 +212,14 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 3.197278911564626,
-            "mean_parallelism": 2.8139241381694964,
-            "individual_pass_rate": 1,
-            "merged_pass_rate": 1,
-            "mean_unique_units": 6,
-            "mean_total_cost_usd": 1.26912675,
-            "units_per_dollar": 4.727660180513885,
-            "mean_wall_seconds": 57.842
+            "mean_token_overhead": 0,
+            "mean_parallelism": 2.058718412792962,
+            "individual_pass_rate": 0,
+            "merged_pass_rate": 0,
+            "mean_unique_units": 4,
+            "mean_total_cost_usd": 1.36131925,
+            "units_per_dollar": 2.9383261861609613,
+            "mean_wall_seconds": 87.298
           }
         },
         {
@@ -231,13 +231,31 @@
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
             "mean_token_overhead": 0,
-            "mean_parallelism": 2.719163844107514,
+            "mean_parallelism": 2.649248485254243,
             "individual_pass_rate": 0,
             "merged_pass_rate": 0,
             "mean_unique_units": 4,
-            "mean_total_cost_usd": 1.539351,
-            "units_per_dollar": 2.5984976785671368,
-            "mean_wall_seconds": 68.791
+            "mean_total_cost_usd": 1.3886917500000002,
+            "units_per_dollar": 2.8804088452314915,
+            "mean_wall_seconds": 59.746
+          }
+        },
+        {
+          "label": "pipeline-claim",
+          "report": {
+            "workload": "workspace-decision",
+            "condition": "pipeline-claim",
+            "n_runs": 1,
+            "file_collision_rate": 0,
+            "duplicate_subgoal_rate": 0,
+            "mean_token_overhead": 0,
+            "mean_parallelism": 2.4128241786138984,
+            "individual_pass_rate": 0,
+            "merged_pass_rate": 0,
+            "mean_unique_units": 5,
+            "mean_total_cost_usd": 1.46024675,
+            "units_per_dollar": 3.4240788414697723,
+            "mean_wall_seconds": 74.843
           }
         }
       ]

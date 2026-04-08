@@ -78,44 +78,6 @@ you plan to accomplish. Example: ["implement camelToKebab", "verify with tests"]
 Then implement whatever the task requires and run the tests.
 `.trim();
 
-const COORDINATION_INSTRUCTION = `
-You are one of several agents working on this directory in parallel. Other
-agents are running RIGHT NOW and will compete with you for work. Follow this
-EXACT procedure for every file before doing anything else with it.
-
-REQUIRED PROCEDURE (do not skip steps, do not improvise):
-
-STEP 1. Register yourself ONCE at the start:
-   mcp__agent-comm__comm_register with name="<unique_id>" channels=["bench"]
-
-STEP 2. List all currently-claimed files:
-   mcp__agent-comm__comm_state with action="list" namespace="file-locks"
-
-STEP 3. Pick ONE filename in this directory that is NOT in the list returned
-   by step 2. If every relevant file is already claimed, STOP — do not edit
-   any file, just write a brief note in subgoals.json saying "all claimed"
-   and exit successfully.
-
-STEP 4. Claim that file atomically:
-   mcp__agent-comm__comm_state with action="cas" namespace="file-locks"
-   key="<filename>" expected=null new="<your_unique_id>" ttl_seconds=600
-   If the cas call returns success=false, the file was claimed by another
-   agent between steps 2 and 3. Go back to STEP 2 and try a different file.
-
-STEP 5. Implement the function in that file. Run \`node test.js\` to verify.
-
-STEP 6. Release the lock:
-   mcp__agent-comm__comm_state with action="delete" namespace="file-locks"
-   key="<filename>"
-
-STEP 7. Go back to STEP 2 to look for more work. Repeat until all files are
-   claimed by other agents or your budget runs low.
-
-CRITICAL: Doing duplicated work is a FAILURE. The point is to divide the
-work — not to solve everything yourself. If another agent has already claimed
-a file, do not touch it.
-`.trim();
-
 function pipelineClaimInstruction(queueNamespace: string, files: string[]): string {
   return `
 You are a worker in a parallel team. There is a shared work queue. You must
@@ -354,9 +316,9 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       await fs.mkdir(runRoot, { recursive: true });
 
       const withMcp =
-        condition === 'bus-and-locks' ||
         condition === 'pipeline-claim' ||
-        opts.installHook === true;
+        opts.installHook === true ||
+        opts.installBashGuard === true;
       // Hook needs the dashboard REST server running.
       const needDashboard =
         opts.installHook === true ||
@@ -386,9 +348,7 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       function buildPrompt(agentIndex: number): string {
         const base = opts.promptForAgent ? opts.promptForAgent(agentIndex) : task.prompt;
         const parts: string[] = [base, SUBGOAL_INSTRUCTION];
-        if (condition === 'bus-and-locks') {
-          parts.push(COORDINATION_INSTRUCTION);
-        } else if (condition === 'pipeline-claim') {
+        if (condition === 'pipeline-claim') {
           parts.push(pipelineClaimInstruction(queueNamespace, opts.expectedFiles));
         }
         return parts.join('\n\n');

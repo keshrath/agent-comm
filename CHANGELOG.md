@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-04-08
+
+### Changed — workspace-decision pilot now has a third condition
+
+The `workspace-decision` pilot was previously documented as a hook loss
+("NO — naive can already coordinate informally"). That verdict was based on
+(1) the broken IPv4 hook silently failing on Windows from v1.3.0–v1.3.3 and
+(2) only comparing naive vs file-coord — without ever testing the `pipeline-claim`
+pattern that's the right architectural fit for task-assignment problems.
+
+v1.3.5 adds a third condition to the pilot: `pipeline-claim`. The driver
+pre-seeds `comm_state` with the 6 file names as queue entries (using the
+existing `bench-q-<runId>` namespace pattern from async-handoff), and workers
+must `cas`-claim before editing. The cas atomicity makes decision collision
+impossible at the data layer.
+
+**Re-run result with all three conditions** (post-IPv4-fix):
+
+|                  | naive  | hooked (file-coord) | **pipeline-claim** |
+| ---------------- | ------ | ------------------- | ------------------ |
+| unique functions | 4/6    | 4/6                 | **5/6** ⭐         |
+| wall time        | 87.3s  | **59.7s (-32%)** ⭐ | 74.8s              |
+| total cost       | $1.361 | $1.389              | $1.460             |
+| units / $        | 2.94   | 2.88                | **3.42** ⭐        |
+
+**Both `pipeline-claim` and `file-coord` are wins, in different ways:**
+
+- `pipeline-claim` is the right tool for task assignment — atomic cas-claim
+  prevents decision collision at the data layer. Result: more unique
+  coverage and the highest units/\$.
+- `file-coord` is still useful here for speed — even at the same coverage
+  as naive, it's 32% faster because it eliminates the wasted "did someone
+  else touch this?" thinking cycles agents do when coordinating informally.
+
+The bench README's TL;DR row for `workspace-decision` is updated from
+"NO — naive can already coordinate informally" to "YES — pipeline-claim
+covers 5/6 vs 4/6 naive; file-coord is 32% faster."
+
+### Removed — bench dead code
+
+- **Three unused workload fixtures deleted**: `bench/workloads/camel-to-kebab`
+  (v1, 2 functions), `bench/workloads/string-utils-6` (v2, forced division
+  by budget), `bench/workloads/algos-12` (v6, solo vs multi). All superseded
+  by current pilots and documented in CHANGELOG history if anyone wants to
+  revive them. Cleanup reduces bench/workloads/ from 8 to 5 directories.
+- **`COORDINATION_INSTRUCTION` removed** — the 60+ line soft-coordination
+  prompt that v3-v6 of the bench empirically falsified. No current pilot
+  uses it. Replaced by `pipelineClaimInstruction()` which is the validated
+  hard-enforcement version.
+- **`bus-and-locks` and `bus-only` condition enum values removed** from
+  `MultiAgentRun.condition`. Only `control` and `pipeline-claim` remain.
+- **`runWorkload`'s default conditions** changed from
+  `['control', 'bus-only', 'bus-and-locks']` to `['control']` to match
+  reality.
+- **Mock driver simplified** — no longer references the dead `bus-and-locks`
+  condition. Distinguishes by `pipeline-claim` vs `control` instead.
+- **Header comment** in `bench/runner.ts` rewritten to describe the v1.3.5
+  reality (mock vs --real, --pilot dispatch, results JSON) instead of the
+  legacy "four experimental cells" scheme.
+
+### Why these are non-breaking
+
+The deleted fixtures were never referenced by the active pilot dispatch
+(`runner.ts` only routes to `shared-routes`, `lost-update`, `real-codebase`,
+`workspace-decision`, `async-handoff`, and `multi-term-commit`). The deleted
+condition enum values had no live consumers. The mock driver still produces
+deterministic data for `npm run bench:run` (no `--real`).
+
+288/288 tests pass.
+
+### On the agent-comm ↔ agent-tasks dependency direction (architectural note)
+
+This release also clarifies an important architectural rule: **agent-comm
+must not depend on agent-tasks**. agent-tasks will eventually want to depend
+on agent-comm (for shared state, presence, cross-session pipeline state),
+which would create a dependency cycle if agent-comm pulls in agent-tasks.
+
+Concretely: the bench's `pipeline-claim` condition uses agent-comm's
+`comm_state` namespace as an ad-hoc queue, NOT the production agent-tasks
+pipeline. This keeps the bench self-contained to one MCP server and
+preserves the correct dependency direction. Validating agent-tasks' real
+pipeline (with stages, dependencies, lifecycle) is a separate effort that
+belongs in a bench inside the agent-tasks repo.
+
 ## [1.3.4] - 2026-04-08
 
 ### Fixed — critical Windows IPv4 bug in all hooks
