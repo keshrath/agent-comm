@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.27] - 2026-04-08
+
+### Changed
+
+- Tidied `.gitignore` with section headers (dependencies, local data, test artifacts, worktrees, OS cruft) and added `test-results/` + `playwright-report/`.
+
+## [1.2.26] - 2026-04-08
+
+### Added
+
+- **Playwright E2E dashboard test suite** at `tests/e2e-ui/dashboard.pw.ts`. Boots the standalone HTTP+WS server against a temp SQLite DB on a free port, drives the dashboard with chromium, and verifies: page loads with no console/page errors, websocket upgrade succeeds, all main tabs (`overview/agents/messages/channels/state/feed`) render their views when clicked, REST `/health` responds with version info. Runnable via `npm run test:e2e:ui` (separate from the existing vitest-based `test:e2e`). Devdep `@playwright/test`. Vitest count unchanged at 264.
+
+## [1.2.25] - 2026-04-08
+
+### Changed
+
+- `CleanupService` now extends `agent-common`'s `CleanupService` base class to inherit the timer + reset-on-startup boilerplate, keeping only the agent-comm-specific cleanup logic locally.
+
+## [1.2.24] - 2026-04-08
+
+### Changed
+
+- `index.ts` MCP dispatcher now delegates to `agent-common`'s `startMcpServer`, removing the local stdio bootstrap boilerplate.
+
+## [1.2.23] - 2026-04-08
+
+### Changed
+
+- `transport/ws.ts` now delegates to `agent-common`'s `setupWebSocket`, removing the local WebSocket plumbing.
+
+## [1.2.22] - 2026-04-08
+
+### Changed
+
+- `transport/rest.ts` now delegates `json` / `readBody` / `serveStatic` helpers to `agent-common`, removing duplicated HTTP plumbing.
+
+## [1.2.21] - 2026-04-08
+
+### Changed
+
+- `storage/database.ts` now delegates to `agent-common`'s `createDb` + `Migration[]` runner, keeping only the agent-comm-specific schema locally.
+
+## [1.2.20] - 2026-04-08
+
+### Changed
+
+- Added `agent-common` as a runtime dependency for events, package metadata, and the dashboard server primitives. First step in the cross-repo deduplication project.
+
 ## [1.2.19] - 2026-04-07
 
 ### Added
