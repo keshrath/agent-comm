@@ -1,6 +1,6 @@
 {
   "name": "agent-comm",
-  "version": "1.2.25",
+  "version": "1.2.26",
   "description": "Agent-agnostic intercommunication system — sessions, messaging, channels, shared state, and real-time events",
   "type": "module",
   "main": "dist/index.js",
@@ -31,6 +31,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run tests/e2e/",
+    "test:e2e:ui": "playwright test",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",
@@ -59,6 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/uuid": "^10.0.0",
