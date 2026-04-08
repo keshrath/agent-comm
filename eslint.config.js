@@ -5,7 +5,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/**/*.ts', 'tests/**/*.ts'],
+    files: ['src/**/*.ts', 'tests/**/*.ts', 'bench/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
@@ -18,6 +18,17 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/', 'node_modules/', 'src/ui/*.js', 'scripts/', '*.config.*'],
+    files: ['bench/runner.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  {
+    ignores: [
+      'dist/',
+      'node_modules/',
+      'src/ui/*.js',
+      'scripts/',
+      '*.config.*',
+      'bench/workloads/',
+    ],
   },
 );

@@ -190,10 +190,13 @@ const migrations: Migration[] = [
   {
     version: 5,
     up: (db: Database.Database) => {
-      db.exec(`
-        ALTER TABLE state ADD COLUMN expires_at TEXT;
-        CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at) WHERE expires_at IS NOT NULL;
-      `);
+      const cols = db.prepare(`PRAGMA table_info(state)`).all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === 'expires_at')) {
+        db.exec(`ALTER TABLE state ADD COLUMN expires_at TEXT`);
+      }
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at) WHERE expires_at IS NOT NULL`,
+      );
     },
   },
 ];
