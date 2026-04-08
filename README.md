@@ -90,9 +90,14 @@ npm install
 npm run build
 ```
 
-### Option 1: MCP server (for AI agents)
+### Option 1: MCP server (for any MCP-compatible AI host)
 
-Add to your MCP client config (Claude Code, Cline, etc.):
+agent-comm runs as a stdio MCP server, so any MCP-compatible host can use it.
+Tested hosts include Claude Code, Cline, OpenCode, Cursor (read-only state),
+Windsurf, Codex CLI, Aider, and Continue.dev. Adapter recipes for each are in
+[docs/SETUP.md](docs/SETUP.md#client-setup).
+
+Generic MCP config:
 
 ```json
 {
@@ -105,7 +110,13 @@ Add to your MCP client config (Claude Code, Cline, etc.):
 }
 ```
 
-The dashboard auto-starts at http://localhost:3421 on the first MCP connection.
+Add this to your host's MCP config file (the path varies by host —
+`~/.claude.json` for Claude Code, `~/.config/opencode/config.json` for
+OpenCode, `~/.cursor/config.json` for Cursor, etc. — see the per-host
+sections in `docs/SETUP.md`).
+
+The dashboard auto-starts at http://localhost:3421 on the first MCP connection
+regardless of which host is connected.
 
 ### Option 2: Standalone server (for REST/WebSocket clients)
 
@@ -119,7 +130,7 @@ node dist/server.js --port 3421
 npm run setup
 ```
 
-Registers the MCP server, adds lifecycle [hooks](docs/SETUP.md#hooks), and configures permissions.
+Registers the MCP server in `~/.claude.json`, installs all five [hook scripts](docs/SETUP.md#hooks) (lifecycle + the v1.3.0 file-coord coordination hook), and configures permissions. **Other hosts**: see [docs/SETUP.md](docs/SETUP.md#client-setup) for the per-host integration recipes — every host that supports pre-tool-call hooks can use the same `file-coord.mjs` script unchanged.
 
 ## MCP tools (7)
 
@@ -183,7 +194,7 @@ comm_agents({ "action": "heartbeat", "status_text": null })
 comm_agents({ "action": "heartbeat" })
 ```
 
-**Claude Code agents** get automatic heartbeats and status via hooks (see [Setup docs](docs/SETUP.md)). **Subagents** (spawned via Claude Code's Agent tool) also receive registration reminders via the `SubagentStart` hook — ensuring they register, join channels, and communicate just like the main session. **Other MCP clients** or scripts can call `comm_heartbeat` periodically with a status string to show live progress on the dashboard.
+**Hosts that support lifecycle hooks** (Claude Code, OpenCode, future Cursor/Codex when they ship hook APIs) get automatic heartbeats, registration, and status via the lifecycle hook scripts shipped in `scripts/hooks/`. Subagents spawned by the Agent tool inherit the same registration via `SubagentStart`, so they appear on the dashboard alongside the main session. **Hosts without hook support** (Cursor, Windsurf, Aider as of 2025) can still use the MCP tools — agents must call `comm_register` and `comm_agents heartbeat` from the host's instructions file. **Custom MCP clients or scripts** can call the REST endpoints or use `comm_heartbeat` directly to show live progress.
 
 The REST endpoint `GET /api/agents/:id/heartbeat` returns agent liveness info (status, heartbeat age in ms/s, status text) for external monitoring.
 

@@ -251,6 +251,34 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   });
 
   // -----------------------------------------------------------------------
+  // Bench results — read-only view of bench/_results/latest.json. Returns
+  // an empty object if the file doesn't exist (e.g. bench has never been run).
+  // -----------------------------------------------------------------------
+
+  route('GET', '/api/bench', (_req, res) => {
+    try {
+      // Resolve relative to the cwd of the dashboard process. The bench writes
+      // to bench/_results/latest.json from the agent-comm package root.
+      const candidates = [
+        resolve(process.cwd(), 'bench', '_results', 'latest.json'),
+        resolve(process.cwd(), '..', 'bench', '_results', 'latest.json'),
+      ];
+      for (const p of candidates) {
+        try {
+          const raw = readFileSync(p, 'utf8');
+          json(res, JSON.parse(raw));
+          return;
+        } catch {
+          /* try next */
+        }
+      }
+      json(res, { pilots: [], note: 'No bench results yet. Run `npm run bench:run -- --real`.' });
+    } catch (err) {
+      json(res, { error: String(err) }, 500);
+    }
+  });
+
+  // -----------------------------------------------------------------------
   // POST endpoints for mutations
   // -----------------------------------------------------------------------
 

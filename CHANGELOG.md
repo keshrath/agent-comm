@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-04-08
+
+### Added — bench expansion
+
+- **4 new bench pilots** alongside `shared-routes`:
+  - `lost-update` — 3 agents append to one shared `state.json`. Tests the
+    classic lost-update race. **Hooked: 3/3 items preserved at $0.914 vs naive
+    1/3 at $1.279 — a 4× efficiency win** and the cleanest empirical
+    validation that the file-coord hook fixes a real failure mode.
+  - `real-codebase` — 3 agents make interdependent edits (type field,
+    validation, logging) to a small Node.js project with `src/types.js`,
+    `src/db.js`, `src/user.js` and a real test suite. Both conditions hit
+    3/3, hooked is **23% cheaper** but slower (serialized agents wait).
+  - `workspace-decision` — 3 agents in a multi-file workspace with **NO
+    pre-assignment**, must figure out who does what. **Naive often wins** here
+    because agents distribute work informally; the hook is overhead. Honest
+    negative result.
+  - `async-handoff` — 2 agents in **sequence** sharing a `comm_state` work
+    queue. Tests cross-session continuity. 5/6 functions completed across
+    the handoff at $0.946 — pipeline-claim works for the strongest theoretical
+    use case.
+- **Bench dashboard panel** at <http://localhost:3421/#bench>. Reads
+  `bench/_results/latest.json` via the new `GET /api/bench` REST endpoint.
+  Shows naive vs hooked deltas with green/red highlighting per metric.
+- **Pilot CLI** — `npm run bench:run -- --real --pilot=NAME` runs a single
+  pilot. Default runs all 5 in sequence.
+- **Sequential agent mode** in the bench driver (`sequentialAgents: true`)
+  for the async-handoff pilot.
+
+### Fixed
+
+- **`file-coord` hook reentrancy**: when an agent's earlier PostToolUse failed
+  to release a lock (Claude Code timeout, crash, etc.), the agent's next Edit
+  on the same file would block on its OWN lock indefinitely. Hook now treats
+  "lock held by SELF" as a successful re-acquisition and refreshes the TTL.
+- **`file-coord` hook polling**: blocked agents now poll the lock for up to
+  10 seconds (configurable via `AGENT_COMM_POLL_TIMEOUT_MS`) instead of failing
+  immediately. This is what makes the lost-update workload work — without
+  polling, sibling agents on a single shared file have no way to wait their
+  turn and burn budget retrying.
+- **Hook timeout in `scripts/setup.js` and the bench driver**: bumped from
+  `5s` to `15s` (must stay larger than the hook's poll timeout). The 5s value
+  was killing the hook process mid-poll, which Claude Code interpreted as a
+  hook failure → blocked tool call → agent retries → burns budget. **This was
+  the silent regression that broke `shared-routes` and `workspace-decision`
+  early in the v1.3.1 development cycle.**
+- The user's `~/.claude/settings.json` is updated to the 15s timeout as part
+  of this release.
+
+### Documentation
+
+- **`bench/README.md` rewritten from scratch.** Removed the v1–v6 chronological
+  history (it lives in CHANGELOG and git log). New format leads with the
+  TL;DR table of current results, lists when to use the hook and when not to,
+  documents each pilot, and ends with a "Limitations" section that explicitly
+  acknowledges the fixtures are self-built and points at SWE-bench Lite /
+  MARBLE as the eventual upgrade path.
+- **Main `README.md`** is now host-agnostic. The "MCP server" section explains
+  agent-comm works with any MCP-compatible host (Claude Code, OpenCode,
+  Cursor, Windsurf, Codex CLI, Aider, Continue.dev) and points at
+  `docs/SETUP.md` for per-host integration recipes. The "agent visibility"
+  section is rephrased so it doesn't read like a Claude-only feature.
+
 ## [1.3.0] - 2026-04-08
 
 ### Added

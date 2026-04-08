@@ -87,25 +87,86 @@ function urlEncode(s) {
   return encodeURIComponent(s);
 }
 
+// How long to poll for a lock to become free before giving up. The hook
+// blocks the Claude tool call while polling, so this is also the max
+// per-edit wait time. Tunable via env var.
+//
+// Default 10s — long enough that a typical sibling edit (read + edit + write
+// + release ~1-5s) completes within one poll window, but short enough that
+// agents waiting on a contended file fail fast and let the model react
+// (try a different file, coordinate via comm_send, etc.) instead of burning
+// the entire per-edit budget on a single lock wait.
+const POLL_TIMEOUT_MS = parseInt(process.env.AGENT_COMM_POLL_TIMEOUT_MS ?? '10000', 10);
+const POLL_INTERVAL_MS = parseInt(process.env.AGENT_COMM_POLL_INTERVAL_MS ?? '200', 10);
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function preToolUse(filePath) {
-  const r = await call('POST', `/api/state/${urlEncode(LOCK_NS)}/${urlEncode(filePath)}/cas`, {
-    expected: null,
-    new_value: AGENT_ID,
-    updated_by: AGENT_ID,
-    ttl_seconds: TTL,
-  });
-  // Fail-open on transport errors so a down dashboard never blocks real work.
-  if (!r) return { allow: true };
-  if (r.status === 200 && r.body?.swapped === true) return { allow: true };
-  if (r.status === 200 && r.body?.swapped === false) {
-    const holder = r.body.current?.value ?? 'unknown';
-    return {
-      allow: false,
-      reason: `BLOCKED: agent-comm file lock held by "${holder}" on ${basename(filePath)}. Wait, coordinate via comm_send to that agent, or pick a different file. The lock auto-expires in ${TTL}s.`,
-    };
+  // Poll the cas endpoint until either we acquire the lock, the dashboard
+  // becomes unreachable (fail open), or we hit the poll timeout. This turns
+  // the hook into a true blocking primitive — when there's a single shared
+  // file with no alternative, sibling agents queue up rather than failing.
+  //
+  // Reentrancy: if the lock is currently held by US (same AGENT_ID), we
+  // refresh the TTL and treat the acquisition as successful. This handles
+  // the case where a prior PostToolUse failed to fire (Claude Code timeout,
+  // crash, etc.) and the agent's own old lock would otherwise block its
+  // next edit.
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  let lastHolder = 'unknown';
+  let transportFailed = false;
+  while (Date.now() < deadline) {
+    // First try the fresh-claim path: cas null → AGENT_ID
+    const r = await call('POST', `/api/state/${urlEncode(LOCK_NS)}/${urlEncode(filePath)}/cas`, {
+      expected: null,
+      new_value: AGENT_ID,
+      updated_by: AGENT_ID,
+      ttl_seconds: TTL,
+    });
+    if (!r) {
+      transportFailed = true;
+      break;
+    }
+    if (r.status === 200 && r.body?.swapped === true) return { allow: true };
+    if (r.status === 200 && r.body?.swapped === false) {
+      lastHolder = r.body.current?.value ?? lastHolder;
+      // Reentrant case: the holder is US. Refresh the TTL via a self → self
+      // cas and proceed (the previous PostToolUse must have failed).
+      if (lastHolder === AGENT_ID) {
+        const refresh = await call(
+          'POST',
+          `/api/state/${urlEncode(LOCK_NS)}/${urlEncode(filePath)}/cas`,
+          {
+            expected: AGENT_ID,
+            new_value: AGENT_ID,
+            updated_by: AGENT_ID,
+            ttl_seconds: TTL,
+          },
+        );
+        if (refresh && refresh.status === 200 && refresh.body?.swapped === true) {
+          return { allow: true };
+        }
+        // The lock was released between the two cas calls — loop again,
+        // we'll grab it on the fresh-claim path next iteration.
+      }
+      // Held by someone else — wait and retry.
+      await sleep(POLL_INTERVAL_MS);
+      continue;
+    }
+    // Unexpected response — treat as transport failure (fail open).
+    transportFailed = true;
+    break;
   }
-  // Unexpected response → fail open.
-  return { allow: true };
+  if (transportFailed) {
+    // Fail-open: agent-comm dashboard isn't reachable, never block real work.
+    return { allow: true };
+  }
+  return {
+    allow: false,
+    reason: `BLOCKED: agent-comm file lock on ${basename(filePath)} still held by "${lastHolder}" after ${POLL_TIMEOUT_MS / 1000}s of waiting. The other agent may be stuck. Try again, coordinate via comm_send, or work on a different file.`,
+  };
 }
 
 async function postToolUse(filePath) {

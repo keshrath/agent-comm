@@ -55,6 +55,13 @@ export interface CliDriverOptions {
    * to assign distinct work to each agent so the bench isolates coordination
    * mechanics from decision-collision. */
   promptForAgent?: (agentIndex: number) => string;
+  /** When true, agents are spawned ONE AT A TIME (sequentially) rather than
+   * in parallel. The pipeline-claim seedCtx is reused across agents so they
+   * share the same comm_state DB. Used to test async/cross-session handoff
+   * — agent A completes some work and exits, agent B (new process, fresh
+   * context) picks up the rest via comm_state. Only meaningful with
+   * pipeline-claim condition. */
+  sequentialAgents?: boolean;
 }
 
 const SUBGOAL_INSTRUCTION = `
@@ -254,16 +261,18 @@ function spawnClaude(
         settingsPath,
         JSON.stringify({
           hooks: {
+            // 15s timeout MUST stay larger than the hook's POLL_TIMEOUT_MS
+            // (default 10s) or Claude Code kills the hook process mid-poll.
             PreToolUse: [
               {
                 matcher: 'Edit|Write|MultiEdit',
-                hooks: [{ type: 'command', command: `node ${hookPath} PreToolUse` }],
+                hooks: [{ type: 'command', command: `node ${hookPath} PreToolUse`, timeout: 15 }],
               },
             ],
             PostToolUse: [
               {
                 matcher: 'Edit|Write|MultiEdit',
-                hooks: [{ type: 'command', command: `node ${hookPath} PostToolUse` }],
+                hooks: [{ type: 'command', command: `node ${hookPath} PostToolUse`, timeout: 15 }],
               },
             ],
           },
@@ -377,14 +386,24 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
         }
       }
 
-      // Launch all agents in parallel.
+      // Launch agents — parallel by default, sequential if requested.
       const logDir = path.join(runRoot, '_logs');
       await fs.mkdir(logDir, { recursive: true });
       const totalStart = Date.now();
-      const results = await Promise.all(
-        agentDirs.map((dir, i) =>
-          spawnClaude({
-            agentDir: dir,
+      let results: Array<{
+        tokens: number;
+        wall_ms: number;
+        raw: ClaudeJsonResult | null;
+        stderr: string;
+      }>;
+      if (opts.sequentialAgents) {
+        // One at a time. Each agent's PostToolUse releases its locks before
+        // the next agent starts, so the second agent sees the first's effects
+        // via comm_state.
+        results = [];
+        for (let i = 0; i < n; i++) {
+          const r = await spawnClaude({
+            agentDir: agentDirs[i],
             logDir,
             agentName: `a${i}`,
             prompt: buildPrompt(i),
@@ -393,9 +412,26 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
             installHook: opts.installHook === true,
             hookPort,
             scratchDir,
-          }),
-        ),
-      );
+          });
+          results.push(r);
+        }
+      } else {
+        results = await Promise.all(
+          agentDirs.map((dir, i) =>
+            spawnClaude({
+              agentDir: dir,
+              logDir,
+              agentName: `a${i}`,
+              prompt: buildPrompt(i),
+              budgetUsd: opts.maxBudgetUsd,
+              withMcp,
+              installHook: opts.installHook === true,
+              hookPort,
+              scratchDir,
+            }),
+          ),
+        );
+      }
       const total_wall_ms = Date.now() - totalStart;
 
       // Collect per-agent results.

@@ -168,9 +168,13 @@ if (existsSync(SETTINGS_JSON)) {
       console.log(`  ${eventName} (${matcher}): file-coord already configured`);
       return;
     }
+    // 15s timeout — hook polls up to 10s for the lock, plus headroom for the
+    // REST round trips on either side. MUST stay larger than the hook's
+    // POLL_TIMEOUT_MS or Claude Code kills the hook mid-poll and the model
+    // sees the kill as a tool-call failure (then retries, burning budget).
     hookGroups.push({
       matcher,
-      hooks: [{ type: 'command', command, timeout: 5 }],
+      hooks: [{ type: 'command', command, timeout: 15 }],
     });
     console.log(`  ${eventName} (${matcher}): added file-coord hook`);
   }
