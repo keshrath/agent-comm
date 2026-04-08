@@ -35,6 +35,11 @@ export function call(method, path, body) {
         port: PORT,
         path,
         method,
+        // Force IPv4 — on Windows, Node's default localhost resolution can pick
+        // ::1 first and fail with ECONNREFUSED if the dashboard binds only to
+        // 0.0.0.0 (IPv4). curl handles this gracefully via fallback; Node's
+        // http.request does not.
+        family: 4,
         headers: data
           ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
           : {},

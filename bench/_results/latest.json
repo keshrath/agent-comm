@@ -1,6 +1,6 @@
 {
   "version": "1.3.1",
-  "generated_at": "2026-04-08T20:09:25.577Z",
+  "generated_at": "2026-04-08T21:20:19.758Z",
   "pilots": [
     {
       "name": "async-handoff",
@@ -30,7 +30,7 @@
     {
       "name": "lost-update",
       "description": "3 agents appending to one shared state.json (classic lost-update race)",
-      "timestamp": "2026-04-08T21:15:00.000Z",
+      "timestamp": "2026-04-08T21:20:19.745Z",
       "conditions": [
         {
           "label": "naive",
@@ -40,14 +40,14 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.27,
-            "individual_pass_rate": 0,
-            "merged_pass_rate": 0,
-            "mean_unique_units": 1,
-            "mean_total_cost_usd": 1.279,
-            "units_per_dollar": 0.78,
-            "mean_wall_seconds": 53.7
+            "mean_token_overhead": 4.656779661016949,
+            "mean_parallelism": 2.590426098251741,
+            "individual_pass_rate": 1,
+            "merged_pass_rate": 1,
+            "mean_unique_units": 3,
+            "mean_total_cost_usd": 1.00223375,
+            "units_per_dollar": 2.9933136855548916,
+            "mean_wall_seconds": 46.961
           }
         },
         {
@@ -59,13 +59,56 @@
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
             "mean_token_overhead": 0,
-            "mean_parallelism": 2.52,
+            "mean_parallelism": 2.801340579710145,
+            "individual_pass_rate": 0,
+            "merged_pass_rate": 0,
+            "mean_unique_units": 1,
+            "mean_total_cost_usd": 1.237508,
+            "units_per_dollar": 0.8080755841578398,
+            "mean_wall_seconds": 55.2
+          }
+        }
+      ]
+    },
+    {
+      "name": "multi-term-commit",
+      "description": "2 sequential agents, shared git repo. Session A edits foo+bar (no commit), Session B edits baz+qux and runs `git commit -am`. Naive condition lets B's commit include A's WIP; hooked condition blocks it.",
+      "timestamp": "2026-04-08T21:18:18.191Z",
+      "conditions": [
+        {
+          "label": "naive",
+          "report": {
+            "workload": "multi-term-commit",
+            "condition": "control",
+            "n_runs": 1,
+            "file_collision_rate": 0,
+            "duplicate_subgoal_rate": 0,
+            "mean_token_overhead": 3.647702407002188,
+            "mean_parallelism": 0.9999230414037248,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
-            "mean_unique_units": 3,
-            "mean_total_cost_usd": 0.914,
-            "units_per_dollar": 3.28,
-            "mean_wall_seconds": 174.7
+            "mean_unique_units": 0,
+            "mean_total_cost_usd": 0.77377775,
+            "units_per_dollar": 0,
+            "mean_wall_seconds": 90.958
+          }
+        },
+        {
+          "label": "hooked",
+          "report": {
+            "workload": "multi-term-commit",
+            "condition": "control",
+            "n_runs": 1,
+            "file_collision_rate": 0,
+            "duplicate_subgoal_rate": 0,
+            "mean_token_overhead": 3.7648456057007125,
+            "mean_parallelism": 0.9999111336803351,
+            "individual_pass_rate": 1,
+            "merged_pass_rate": 1,
+            "mean_unique_units": 2,
+            "mean_total_cost_usd": 0.5914685,
+            "units_per_dollar": 0,
+            "mean_wall_seconds": 78.77
           }
         }
       ]

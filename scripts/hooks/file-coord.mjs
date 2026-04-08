@@ -56,6 +56,13 @@ function call(method, path, body) {
         port: PORT,
         path,
         method,
+        // Force IPv4 — on Windows, Node's default localhost resolution can
+        // pick ::1 first and fail with ECONNREFUSED if the dashboard binds
+        // only to 0.0.0.0 (IPv4). curl handles this via fallback; Node's
+        // http.request does not. This was a silent killer for the file-coord
+        // hook on Windows: every PostToolUse write was returning null and the
+        // hook exited 0, masking the failure.
+        family: 4,
         headers: data
           ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
           : {},

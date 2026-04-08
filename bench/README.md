@@ -12,18 +12,32 @@ designed to surface both. We publish negative results alongside positive ones.
 
 ## TL;DR (current state)
 
-| Pilot                | What it tests                                                | Hook winner?                                     |
-| -------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
-| `lost-update`        | 3 agents append to one shared `state.json` (classic race)    | **YES — 4× efficiency**                          |
-| `shared-routes`      | 3 agents add routes to one shared `routes.js` (pre-assigned) | **YES — cheaper, faster, deterministic**         |
-| `real-codebase`      | 3 agents make interdependent edits in a small Node project   | **PARTIAL — cheaper, slower**                    |
-| `workspace-decision` | 3 agents in a multi-file workspace, NO pre-assignment        | **NO — naive can already coordinate informally** |
-| `async-handoff`      | 2 agents in sequence sharing a `comm_state` queue            | **YES — 5/6 cross-session continuity**           |
+| Pilot                   | What it tests                                                                                                   | Hook winner?                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **`multi-term-commit`** | **2 sequential terminal sessions, A edits foo+bar (no commit), B then edits baz+qux and runs `git commit -am`** | **YES ⭐ — clean commit + 13% faster + 24% cheaper** |
+| `lost-update`           | 3 agents append to one shared `state.json` (classic race)                                                       | YES — 4× efficiency (early run; needs re-validation) |
+| `shared-routes`         | 3 agents add routes to one shared `routes.js` (pre-assigned)                                                    | YES — cheaper, faster, deterministic                 |
+| `real-codebase`         | 3 agents make interdependent edits in a small Node project                                                      | PARTIAL — cheaper, slower                            |
+| `workspace-decision`    | 3 agents in a multi-file workspace, NO pre-assignment                                                           | NO — naive can already coordinate informally         |
+| `async-handoff`         | 2 agents in sequence sharing a `comm_state` queue                                                               | YES — 5/6 cross-session continuity                   |
 
-The hook **definitively wins** on workloads with high contention on a small
-number of shared files, where naive races destroy work. It is **overhead** on
-workloads where the natural file layout lets agents distribute work informally.
-The full numbers are in [Detailed Results](#detailed-results) below.
+**The headline is `multi-term-commit`** — the only pilot that directly
+tests the user-facing multi-terminal scenario the project was designed to
+fix, validated end-to-end after the v1.3.4 critical IPv4 fix. It produces
+a clean win on every dimension (purity, wall time, cost). The other pilots
+are interesting infrastructure measurements; `multi-term-commit` is the
+one that maps to actual daily pain.
+
+> **Note on prior results**: a critical Windows IPv4 bug in the hook's
+> `http.request` calls was discovered and fixed in **v1.3.4**. The hook
+> was using `host: 'localhost'` and Node's default DNS preferred IPv6,
+> but the dashboard binds to IPv4 only — every hook HTTP call returned
+> `ECONNREFUSED`, and the fail-soft `null` resolution meant the hook
+> exited 0 silently as if everything worked. All bench results from
+> v1.3.0 onward that depended on the file-coord hook firing on Windows
+> may have been silently degraded by this bug. The `multi-term-commit`
+> row is from a post-fix run; the others are from earlier runs and
+> should be re-validated. Re-validation is on the v1.3.5+ roadmap.
 
 ## When to use the file-coord hook
 

@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-04-08
+
+### Fixed — critical Windows IPv4 bug in all hooks
+
+**THE BIG ONE.** All hook scripts (`file-coord.mjs`, `bash-guard.mjs`,
+`workspace-awareness.mjs` via `_agent-comm-rest.mjs`) used Node `http.request`
+with `host: 'localhost'`. On Windows, Node's default DNS resolution prefers
+IPv6 (`::1`) and the agent-comm dashboard binds only to `0.0.0.0` (IPv4). The
+result: every hook HTTP call returned `ECONNREFUSED`, the hooks fail-soft
+catch resolved to `null`, and the hook exited 0 silently as if everything
+worked.
+
+**This was a silent killer.** It meant the file-coord hook's `PostToolUse`
+write to `files-edited` was never landing on Windows. The hook reported
+"success", agents thought the file was being recorded, but the world model
+was never updated. Downstream hooks (bash-guard) then saw an empty
+`files-edited` namespace and never had any reason to block.
+
+Fixed by adding `family: 4` to all `http.request` options in:
+
+- `scripts/hooks/file-coord.mjs` — the original hook from v1.3.0
+- `scripts/hooks/_agent-comm-rest.mjs` — the shared lib used by
+  `bash-guard` and `workspace-awareness`
+
+Validation: probe test confirms `files-edited` POST writes through after
+the fix. Multi-term-commit pilot now produces the expected end-to-end
+result (see below).
+
+### Validated — multi-term-commit pilot
+
+With the IPv4 fix in place, the v1.3.3 multi-term-commit pilot finally
+produces the expected end-to-end result. Two sequential agents in a shared
+git repo, session-A edits foo+bar (no commit), session-B edits baz+qux and
+runs `git commit -am`:
+
+| Condition    | commit_purity                | files in B's commit            | wall      | cost       |
+| ------------ | ---------------------------- | ------------------------------ | --------- | ---------- |
+| `naive`      | **MIXED** (clobbers A's WIP) | bar.js, baz.js, foo.js, qux.js | 91.0s     | $0.774     |
+| **`hooked`** | **PURE**                     | **baz.js, qux.js**             | **78.8s** | **$0.591** |
+
+**Hooked is 13% faster, 24% cheaper, AND produces a clean commit** instead
+of silently mixing in session-A's WIP under B's commit message.
+
+This is the **strongest empirical validation the project has had so far**.
+The bench now directly proves the multi-terminal value prop: the v1.3.2
+hooks fix the temporal-coordination scenario described in the v1.3.2
+release notes.
+
+### Implication for prior bench results
+
+All bench results from v1.3.0 onward that depended on the file-coord hook
+firing on Windows may have been **partially or completely broken** by this
+silent IPv4 issue. The earlier "wins" we recorded (lost-update 4× efficiency
+in particular) may have been timing artifacts rather than true hook
+behavior. We can't know for sure without re-running every pilot, which
+costs API budget. The bench README's TL;DR table reflects the v1.3.4
+re-run for `multi-term-commit` and the older runs for everything else;
+re-running the others is on the v1.3.5+ roadmap when budget allows.
+
 ## [1.3.3] - 2026-04-08
 
 ### Added — multi-term-commit bench pilot

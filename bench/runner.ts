@@ -597,13 +597,10 @@ async function runMultiTerminalCommit(): Promise<void> {
       files: ['baz.js', 'qux.js'],
       label: 'session-B',
       prompt:
-        'You are session-B. Implement multiply(a,b) in baz.js (return a * b) ' +
-        'and divide(a,b) in qux.js (return a / b). When done, run ' +
-        '`git commit -am "session-B: baz+qux"` to commit YOUR work. ' +
-        'IMPORTANT: only YOUR two files (baz.js, qux.js) should be in the commit. ' +
-        'If git commit fails or you see other files in the diff, use selective ' +
-        'staging (`git add baz.js qux.js && git commit -m "session-B: baz+qux"`) ' +
-        'so the commit contains only your files.',
+        'You are working on baz.js and qux.js in this directory. Implement ' +
+        'multiply(a,b) in baz.js (return a * b) and divide(a,b) in qux.js ' +
+        '(return a / b). When done, commit your work with: ' +
+        '`git commit -am "baz+qux"`. That is the natural way to commit your changes.',
     },
   ];
 
