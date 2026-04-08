@@ -218,6 +218,7 @@ export const tools: ToolDefinition[] = [
           description: '[cas] Expected current value (null if key should not exist)',
         },
         new_value: { type: 'string', description: '[cas] New value (empty string to delete)' },
+        // ttl_seconds also applies to cas (sets TTL on the new value), not just set
         prefix: { type: 'string', description: '[list] Filter by key prefix' },
       },
       required: ['action'],

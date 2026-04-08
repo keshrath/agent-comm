@@ -8,6 +8,10 @@
 // Context (entry point for library consumers)
 export { createContext, type AppContext } from './context.js';
 
+// Dashboard server (REST + WS) — exposed so embedded users (e.g. the bench)
+// can spin up the HTTP layer without spawning the MCP stdio entry point.
+export { startDashboard, type DashboardServer } from './server.js';
+
 // Storage
 export { createDb, type Db, type DbOptions } from './storage/database.js';
 

@@ -19,7 +19,12 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import type { AgentDriver, WorkloadTask } from '../runner.js';
 import type { AgentRun, MultiAgentRun } from '../metrics.js';
-import { createContext, type AppContext } from '../../src/lib.js';
+import {
+  createContext,
+  startDashboard,
+  type AppContext,
+  type DashboardServer,
+} from '../../src/lib.js';
 
 // Bench tmp lives OUTSIDE ~/.claude/ — Claude Code hard-blocks writes to paths
 // under its own config dir even with --permission-mode bypassPermissions.
@@ -37,6 +42,19 @@ export interface CliDriverOptions {
   maxBudgetUsd: number;
   /** Names of files in the fixture an agent is expected to edit. */
   expectedFiles: string[];
+  /** When true, all agents share ONE working dir instead of getting per-agent
+   * copies. Used for benchmarks that need real file race conditions. The driver
+   * spawns an agent-comm dashboard server before the run so the file-coord
+   * hook can talk to it via REST. */
+  sharedDir?: boolean;
+  /** When true, install the file-coord PreToolUse/PostToolUse hook in each
+   * agent's --settings JSON. Forces claim-before-edit at the system layer. */
+  installHook?: boolean;
+  /** Optional: per-agent prompt override. When set, agent i gets the result
+   * of calling this with i (0-indexed); the task.prompt is unused. Use this
+   * to assign distinct work to each agent so the bench isolates coordination
+   * mechanics from decision-collision. */
+  promptForAgent?: (agentIndex: number) => string;
 }
 
 const SUBGOAL_INSTRUCTION = `
@@ -169,15 +187,36 @@ interface ClaudeJsonResult {
   is_error?: boolean;
 }
 
+interface SpawnOptions {
+  agentDir: string;
+  logDir: string;
+  agentName: string;
+  prompt: string;
+  budgetUsd: number;
+  withMcp: boolean;
+  installHook: boolean;
+  /** Port the file-coord hook should hit (when installHook is true). */
+  hookPort?: number;
+  /** Output dir for per-agent settings/config files (so they don't pollute the
+   * shared agent dir in sharedDir mode). */
+  scratchDir: string;
+}
+
 function spawnClaude(
-  agentDir: string,
-  logDir: string,
-  agentName: string,
-  prompt: string,
-  budgetUsd: number,
-  withMcp: boolean,
+  opts: SpawnOptions,
 ): Promise<{ tokens: number; wall_ms: number; raw: ClaudeJsonResult | null; stderr: string }> {
   return new Promise((resolve) => {
+    const {
+      agentDir,
+      logDir,
+      agentName,
+      prompt,
+      budgetUsd,
+      withMcp,
+      installHook,
+      hookPort,
+      scratchDir,
+    } = opts;
     const args = [
       '-p',
       '--output-format',
@@ -193,7 +232,7 @@ function spawnClaude(
       // Path must be in OS-native form with forward slashes — node.exe on
       // Windows accepts C:/foo but NOT bash-style /c/foo paths.
       const indexPath = path.resolve(process.cwd(), 'dist', 'index.js').replace(/\\/g, '/');
-      const cfgPath = path.join(path.dirname(agentDir), `_mcp-cfg-${agentName}.json`);
+      const cfgPath = path.join(scratchDir, `_mcp-cfg-${agentName}.json`);
       writeFileSync(
         cfgPath,
         JSON.stringify({
@@ -204,12 +243,48 @@ function spawnClaude(
       );
       args.push('--mcp-config', cfgPath);
     }
-    // The `--` separator is REQUIRED: --mcp-config is variadic and will
-    // otherwise consume the prompt as another config path.
+    if (installHook) {
+      // Write a per-agent settings.json that registers the file-coord hook
+      // for both PreToolUse and PostToolUse on Edit/Write/MultiEdit.
+      const hookPath = path
+        .resolve(process.cwd(), 'scripts', 'hooks', 'file-coord.mjs')
+        .replace(/\\/g, '/');
+      const settingsPath = path.join(scratchDir, `_settings-${agentName}.json`);
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Edit|Write|MultiEdit',
+                hooks: [{ type: 'command', command: `node ${hookPath} PreToolUse` }],
+              },
+            ],
+            PostToolUse: [
+              {
+                matcher: 'Edit|Write|MultiEdit',
+                hooks: [{ type: 'command', command: `node ${hookPath} PostToolUse` }],
+              },
+            ],
+          },
+        }),
+      );
+      args.push('--settings', settingsPath);
+    }
+    // The `--` separator is REQUIRED: --mcp-config and --settings are variadic
+    // and will otherwise consume the prompt.
     args.push('--', prompt);
 
     const start = Date.now();
-    const child = spawn('claude', args, { cwd: agentDir, shell: false });
+    const child = spawn('claude', args, {
+      cwd: agentDir,
+      shell: false,
+      env: {
+        ...process.env,
+        AGENT_COMM_ID: agentName,
+        AGENT_COMM_PORT: String(hookPort ?? 3421),
+      },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => (stdout += d.toString()));
@@ -246,12 +321,20 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       const runRoot = path.join(TMP_ROOT, `bench-${runId}`);
       await fs.mkdir(runRoot, { recursive: true });
 
-      const withMcp = condition === 'bus-and-locks' || condition === 'pipeline-claim';
+      const withMcp =
+        condition === 'bus-and-locks' ||
+        condition === 'pipeline-claim' ||
+        opts.installHook === true;
+      // Hook needs the dashboard REST server running.
+      const needDashboard = opts.installHook === true || condition === 'pipeline-claim';
 
       // Pipeline-claim condition: pre-seed the work queue via direct lib
       // import. Workers will atomically claim entries via cas before editing.
       let queueNamespace = '';
       let seedCtx: AppContext | null = null;
+      let dashboard: DashboardServer | null = null;
+      // Use a per-run port so concurrent runs don't fight over 3421.
+      const hookPort = 3500 + Math.floor(Math.random() * 400);
       if (condition === 'pipeline-claim') {
         queueNamespace = `bench-q-${runId}`;
         seedCtx = createContext();
@@ -259,21 +342,39 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
           seedCtx.state.set(queueNamespace, file, 'pending', 'bench-driver', 3600);
         }
       }
-
-      const promptParts: string[] = [task.prompt, SUBGOAL_INSTRUCTION];
-      if (condition === 'bus-and-locks') {
-        promptParts.push(COORDINATION_INSTRUCTION);
-      } else if (condition === 'pipeline-claim') {
-        promptParts.push(pipelineClaimInstruction(queueNamespace, opts.expectedFiles));
+      if (needDashboard) {
+        // Reuse the seedCtx if we have one, otherwise spin up our own.
+        if (!seedCtx) seedCtx = createContext();
+        dashboard = await startDashboard(seedCtx, hookPort);
       }
-      const prompt = promptParts.join('\n\n');
 
-      // Prepare per-agent dirs in parallel.
+      function buildPrompt(agentIndex: number): string {
+        const base = opts.promptForAgent ? opts.promptForAgent(agentIndex) : task.prompt;
+        const parts: string[] = [base, SUBGOAL_INSTRUCTION];
+        if (condition === 'bus-and-locks') {
+          parts.push(COORDINATION_INSTRUCTION);
+        } else if (condition === 'pipeline-claim') {
+          parts.push(pipelineClaimInstruction(queueNamespace, opts.expectedFiles));
+        }
+        return parts.join('\n\n');
+      }
+
+      // Per-agent vs shared dir.
+      const scratchDir = path.join(runRoot, '_scratch');
+      await fs.mkdir(scratchDir, { recursive: true });
       const agentDirs: string[] = [];
-      for (let i = 0; i < n; i++) {
-        const dir = path.join(runRoot, `a${i}`);
-        await copyDir(opts.fixtureDir, dir);
-        agentDirs.push(dir);
+      let sharedAgentDir = '';
+      if (opts.sharedDir) {
+        // ONE working dir, all agents cd into it.
+        sharedAgentDir = path.join(runRoot, 'shared');
+        await copyDir(opts.fixtureDir, sharedAgentDir);
+        for (let i = 0; i < n; i++) agentDirs.push(sharedAgentDir);
+      } else {
+        for (let i = 0; i < n; i++) {
+          const dir = path.join(runRoot, `a${i}`);
+          await copyDir(opts.fixtureDir, dir);
+          agentDirs.push(dir);
+        }
       }
 
       // Launch all agents in parallel.
@@ -282,29 +383,63 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       const totalStart = Date.now();
       const results = await Promise.all(
         agentDirs.map((dir, i) =>
-          spawnClaude(dir, logDir, `a${i}`, prompt, opts.maxBudgetUsd, withMcp),
+          spawnClaude({
+            agentDir: dir,
+            logDir,
+            agentName: `a${i}`,
+            prompt: buildPrompt(i),
+            budgetUsd: opts.maxBudgetUsd,
+            withMcp,
+            installHook: opts.installHook === true,
+            hookPort,
+            scratchDir,
+          }),
         ),
       );
       const total_wall_ms = Date.now() - totalStart;
 
       // Collect per-agent results.
+      // In sharedDir mode, all agents work in the same directory and the
+      // post-run state IS the merged result. We compute units_completed once
+      // (from the shared dir) and then attribute to ALL agents collectively;
+      // file collision is no longer the right metric (everything is "shared").
       const agents: AgentRun[] = [];
-      for (let i = 0; i < n; i++) {
-        const dir = agentDirs[i];
-        const r = results[i];
-        const files_edited = await diffEdited(opts.fixtureDir, dir);
-        const subgoals = await readSubgoals(dir);
-        const test = await runTest(dir, opts.testCmd);
-        agents.push({
-          agent: `a${i}`,
-          files_edited,
-          subgoals,
-          tokens: r.tokens,
-          wall_ms: r.wall_ms,
-          tests_passed: test.passed,
-          units_completed: test.units,
-          cost_usd: r.raw?.total_cost_usd,
-        });
+      if (opts.sharedDir) {
+        const sharedTest = await runTest(sharedAgentDir, opts.testCmd);
+        for (let i = 0; i < n; i++) {
+          const r = results[i];
+          agents.push({
+            agent: `a${i}`,
+            files_edited: [], // not meaningful in shared mode
+            subgoals: [],
+            tokens: r.tokens,
+            wall_ms: r.wall_ms,
+            tests_passed: sharedTest.passed,
+            // Workload-level units (e.g. routes) — same for all agents because
+            // it's the merged shared state. We split evenly across agents to
+            // avoid the dedup logic over-counting.
+            units_completed: i === 0 ? sharedTest.units : [],
+            cost_usd: r.raw?.total_cost_usd,
+          });
+        }
+      } else {
+        for (let i = 0; i < n; i++) {
+          const dir = agentDirs[i];
+          const r = results[i];
+          const files_edited = await diffEdited(opts.fixtureDir, dir);
+          const subgoals = await readSubgoals(dir);
+          const test = await runTest(dir, opts.testCmd);
+          agents.push({
+            agent: `a${i}`,
+            files_edited,
+            subgoals,
+            tokens: r.tokens,
+            wall_ms: r.wall_ms,
+            tests_passed: test.passed,
+            units_completed: test.units,
+            cost_usd: r.raw?.total_cost_usd,
+          });
+        }
       }
 
       // Merged-tests proxy for v0: we don't actually merge worktrees. Instead,
@@ -321,7 +456,14 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       const allPassed = agents.every((a) => a.tests_passed);
       const merged_tests_passed = allPassed && !overlap;
 
-      // Tear down the seed context (closes the DB handle).
+      // Tear down the dashboard and seed context (closes the DB handle).
+      if (dashboard) {
+        try {
+          dashboard.close();
+        } catch {
+          /* best effort */
+        }
+      }
       if (seedCtx) {
         try {
           seedCtx.close();

@@ -452,12 +452,17 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
         const self = agent.require();
         ctx.rateLimiter.check(self.id);
         const ns = optString(args, 'namespace') ?? 'default';
+        const ttl =
+          typeof args.ttl_seconds === 'number' && Number.isFinite(args.ttl_seconds)
+            ? (args.ttl_seconds as number)
+            : undefined;
         const swapped = ctx.state.compareAndSwap(
           ns,
           requireString(args, 'key'),
           optStringOrNull(args, 'expected'),
           requireString(args, 'new_value'),
           self.id,
+          ttl,
         );
         return { swapped };
       }

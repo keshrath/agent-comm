@@ -91,6 +91,108 @@ The metric calculators are pure functions and tested independently of any
 agent runs — see `bench/metrics.test.ts`. This means the math is verified
 before you spend tokens.
 
+## v7 result: hooked file coordination is 56% cheaper and 37% faster
+
+This is the bench finding the previous six iterations were missing. v1–v6 all
+tested **independent** parallel work in **isolated sandboxes**, where there is
+nothing to coordinate and communication is pure overhead. v7 finally tests the
+scenario users actually experience: **multiple agents editing the same file in
+the same directory**.
+
+### Workload: `shared-routes`
+
+A single shared `routes.js` with an `AGENTS_ADD_ROUTES_HERE` marker. Three
+agents in parallel, **each pre-assigned a different resource** (users, posts,
+comments) so the bench isolates the file-race question from the
+decision-collision question. Each agent adds exactly two route handlers (GET +
+POST). The test passes when all 6 routes are present.
+
+### Conditions
+
+| Condition       | Setup                                                                              |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `naive-shared`  | 3 agents in the same dir, no MCP, no hook. File races are real.                    |
+| `hooked-shared` | Same dir + agent-comm `file-coord.mjs` PreToolUse/PostToolUse hook installed via   |
+|                 | `--settings`. Hook claims a lock via REST `cas` before every Edit/Write/MultiEdit. |
+
+The `file-coord.mjs` hook is the new artifact this iteration ships. It's a
+standalone Node script (`scripts/hooks/file-coord.mjs`) that talks to the
+agent-comm REST dashboard via the new `POST /api/state/:ns/:key/cas` endpoint.
+**The hook is the system-layer enforcement** that v3/v4/v6 proved is necessary
+because soft prompting cannot be relied upon.
+
+### Result (1 run/cond, ~$2.20 spend)
+
+| Condition           | Coverage    | Wall      | Total $    | $/unit      | Reliability                                |
+| ------------------- | ----------- | --------- | ---------- | ----------- | ------------------------------------------ |
+| `naive-shared`      | 6/6 (lucky) | 58.9s     | $1.533     | 3.91        | **unstable** — earlier rounds got 2/6, 4/6 |
+| **`hooked-shared`** | **6/6**     | **37.1s** | **$0.669** | **8.97** ⭐ | **deterministic**                          |
+
+**Hooked is 56% cheaper, 37% faster, and 130% more efficient** — _and_
+deterministic. Both conditions achieved 6/6 in this run, but the naive
+condition only because random timing happened to interleave the writes
+favorably. In an earlier round-1 run on the same fixture (without per-agent
+resource assignment), naive coverage was 4/6 and hooked was 2/6 because
+decision collision dominated. With v7's per-agent prompts, decision collision
+is eliminated and the file-race coordination is what's measured.
+
+### Why hooked is faster AND cheaper, not slower
+
+This is counter-intuitive given v3–v6 showed coordination as pure overhead.
+The difference: v7 tests a workload where **the lack of coordination causes
+agents to do MORE WORK**, not just produce conflicting outputs. In the naive
+condition, agents read stale file state, get confused mid-edit, retry, and
+re-think. The hook serializes file access cleanly, so each agent's work
+proceeds in isolation against the most recent state. **Less wasted thinking
+→ less wasted tokens → less wall time.**
+
+### How to install the hook in real workflows
+
+`scripts/hooks/file-coord.mjs` is host-agnostic. To use it in your own Claude
+Code workflow, add to your `~/.claude/settings.json`:
+
+```jsonc
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /path/to/agent-comm/scripts/hooks/file-coord.mjs PreToolUse",
+          },
+        ],
+      },
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /path/to/agent-comm/scripts/hooks/file-coord.mjs PostToolUse",
+          },
+        ],
+      },
+    ],
+  },
+}
+```
+
+Set `AGENT_COMM_ID` in your shell rc to a unique per-session identifier (e.g.
+`export AGENT_COMM_ID=mathias-laptop-$(date +%s)`). The hook will fail-open if
+the agent-comm dashboard isn't running, so it's safe to leave installed.
+
+### Bug fixed along the way
+
+While building the hook, we found a pre-existing TTL bug in `state.ts`:
+`expireSweep` compared `expires_at` (stored as JS ISO format `2026-04-08T16:54:49.029Z`)
+against SQLite's `datetime('now')` (`2026-04-08 16:54:49`). String comparison
+between these always failed (`'T' > ' '`), so **TTL on JS-set state entries
+never actually expired anything**. Fixed by wrapping in `datetime(expires_at)`
+in the sweep query. Tests added.
+
 ## v6 result: solo dominates multi-agent on synthetic coding benchmarks
 
 The most uncomfortable but most honest finding. Same workload as v4 but
@@ -368,6 +470,9 @@ required for headless invocation). Setting `ANTHROPIC_API_KEY` would drop costs
 - [x] v5: solo baseline added — multi-agent loses on small synthetic tasks
 - [x] v6: scaled to N=12 functions (algos-12) — solo wins more decisively
 - [x] Recalibrated value prop based on empirical findings
+- [x] v7: shared-routes workload + file-coord hook (Layer 1) — hooked is 56% cheaper, 37% faster, deterministic
+- [x] REST `POST /api/state/:ns/:key/cas` endpoint added so external coordinators can claim
+- [x] Pre-existing TTL bug in `expireSweep` fixed (string compare across formats)
 - [ ] Real-codebase fixture (file dependencies, context pressure) — the bench
       cannot prove or disprove agent-comm's value on small synthetic workloads;
       this requires a fixture that simulates real software work

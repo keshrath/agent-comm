@@ -130,6 +130,88 @@ async function main(): Promise<void> {
     return;
   }
 
+  // ----- v7 pilot: shared-routes — N agents editing the SAME file ---------
+  // The bench finally tests what the user actually experiences: multiple
+  // agents editing one shared file, where coordination has REAL value because
+  // races silently overwrite work. Three conditions:
+  //   - naive-shared: same dir, no MCP, no hook → expect <6/6 coverage
+  //   - prompted-shared: same dir, MCP + soft procedural prompt → unstable
+  //   - hooked-shared: same dir, file-coord PreToolUse hook installed →
+  //     coordination is enforced at the tool layer, expect 6/6
+  const sharedFixture = path.resolve('bench/workloads/shared-routes');
+  const sharedExpected = ['routes.js'];
+  // Per-agent resource assignment — each agent gets a UNIQUE resource so we
+  // isolate the file-race question from the decision-collision question.
+  const RESOURCES = ['users', 'posts', 'comments'];
+  const promptForAgent = (i: number): string => {
+    const resource = RESOURCES[i % RESOURCES.length];
+    return (
+      `You are agent #${i} (of 3) editing the SHARED file routes.js in this directory. ` +
+      `Other agents are editing the same file in parallel right now. ` +
+      `Your assigned resource is "${resource}". ` +
+      `Add EXACTLY two route handlers below the AGENTS_ADD_ROUTES_HERE marker:\n` +
+      `  addRoute("GET", "/api/${resource}", () => "ok");\n` +
+      `  addRoute("POST", "/api/${resource}", () => "ok");\n` +
+      `IMPORTANT: do not remove other agents' routes. Other agents are adding routes for ` +
+      `users, posts, and comments. The test \`node test.js\` passes only when ALL 6 routes ` +
+      `(GET+POST for all 3 resources) are present. Verify when you're done.`
+    );
+  };
+  const sharedTask: WorkloadTask = {
+    task_id: 'shared-routes-pilot',
+    workload: 'shared-routes',
+    target: 'bench/workloads/shared-routes',
+    prompt: 'unused — see promptForAgent',
+  };
+
+  const sharedNaive = makeCliDriver({
+    fixtureDir: sharedFixture,
+    testCmd: 'node test.js',
+    maxBudgetUsd: 0.5,
+    expectedFiles: sharedExpected,
+    sharedDir: true,
+    promptForAgent,
+  });
+  const sharedHooked = makeCliDriver({
+    fixtureDir: sharedFixture,
+    testCmd: 'node test.js',
+    maxBudgetUsd: 0.5,
+    expectedFiles: sharedExpected,
+    sharedDir: true,
+    installHook: true,
+    promptForAgent,
+  });
+
+  console.log('agent-comm bench (REAL driver) — v7: shared-routes, N=3, 1 run/cond');
+  console.log('Per-agent budget cap: $0.50. Worst case total: 6 agents × $0.50 = $3.00.\n');
+
+  const naiveReport = (
+    await runWorkload({
+      workload: 'shared-routes',
+      tasks: [sharedTask],
+      n_agents: 3,
+      driver: sharedNaive,
+      conditions: ['control'],
+      n_runs: 1,
+    })
+  )[0];
+  const hookedReport = (
+    await runWorkload({
+      workload: 'shared-routes',
+      tasks: [sharedTask],
+      n_agents: 3,
+      driver: sharedHooked,
+      conditions: ['control'],
+      n_runs: 1,
+    })
+  )[0];
+
+  console.log('=== NAIVE-SHARED (no hook, 3 agents in same dir) ===');
+  console.log(formatReport(naiveReport), '\n');
+  console.log('=== HOOKED-SHARED (file-coord PreToolUse hook installed) ===');
+  console.log(formatReport({ ...hookedReport, condition: 'pipeline-claim' as const }), '\n');
+  return;
+
   // ----- v6 pilot: algos-12, scale up to make multi-agent's case --------
   // 12 algorithm-tier problems. At N=12 the per-agent fixed overhead amortizes
   // and parallelism should give multi-agent a clear wall-time win over solo

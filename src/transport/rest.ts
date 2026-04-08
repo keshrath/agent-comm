@@ -368,6 +368,38 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     json(res, { deleted: true });
   });
 
+  // Atomic compare-and-swap. Used by external coordinators (e.g. Claude Code
+  // PreToolUse hooks) to claim file locks without going through the MCP layer.
+  // Returns { swapped: true } on success, { swapped: false, current } on
+  // failure (so the caller can see who currently holds the entry).
+  route('POST', '/api/state/:namespace/:key/cas', async (req, res, params) => {
+    const body = await readBody(req);
+    const expected = body.expected === null ? null : (body.expected as string | undefined);
+    const newValue = body.new_value as string | undefined;
+    const updatedBy = body.updated_by as string | undefined;
+    const ttlRaw = body.ttl_seconds;
+    const ttl =
+      typeof ttlRaw === 'number' && Number.isFinite(ttlRaw) && ttlRaw > 0 ? ttlRaw : undefined;
+
+    if (typeof newValue !== 'string') return json(res, { error: '"new_value" is required' }, 400);
+    if (!updatedBy || typeof updatedBy !== 'string')
+      return json(res, { error: '"updated_by" (agent ID or name) is required' }, 400);
+    if (expected !== null && typeof expected !== 'string')
+      return json(res, { error: '"expected" must be a string or null' }, 400);
+
+    const swapped = ctx.state.compareAndSwap(
+      params.namespace,
+      params.key,
+      expected ?? null,
+      newValue,
+      updatedBy,
+      ttl,
+    );
+    if (swapped) return json(res, { swapped: true });
+    const current = ctx.state.get(params.namespace, params.key);
+    json(res, { swapped: false, current });
+  });
+
   route('DELETE', '/api/messages', (_req, res) => {
     const purged = ctx.cleanup.purgeMessages();
     json(res, { purged });

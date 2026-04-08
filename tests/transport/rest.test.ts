@@ -355,6 +355,46 @@ describe('REST API error cases', () => {
     });
   });
 
+  describe('POST /api/state/:namespace/:key/cas', () => {
+    it('claims an unheld lock', async () => {
+      const { status, body } = await post('/api/state/locks/file.ts/cas', {
+        expected: null,
+        new_value: 'agent-A',
+        updated_by: 'agent-A',
+        ttl_seconds: 60,
+      });
+      expect(status).toBe(200);
+      expect(body.swapped).toBe(true);
+    });
+
+    it('rejects a second claim and returns the current holder', async () => {
+      await post('/api/state/locks/file.ts/cas', {
+        expected: null,
+        new_value: 'agent-A',
+        updated_by: 'agent-A',
+        ttl_seconds: 60,
+      });
+      const { status, body } = await post('/api/state/locks/file.ts/cas', {
+        expected: null,
+        new_value: 'agent-B',
+        updated_by: 'agent-B',
+        ttl_seconds: 60,
+      });
+      expect(status).toBe(200);
+      expect(body.swapped).toBe(false);
+      expect(body.current?.value).toBe('agent-A');
+    });
+
+    it('returns 400 when new_value is missing', async () => {
+      const { status, body } = await post('/api/state/locks/file.ts/cas', {
+        expected: null,
+        updated_by: 'agent-A',
+      });
+      expect(status).toBe(400);
+      expect(body.error).toContain('new_value');
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Branches
   // -------------------------------------------------------------------------

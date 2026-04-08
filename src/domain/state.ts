@@ -61,9 +61,16 @@ export class StateService {
     ]);
   }
 
-  /** Lazy-delete expired entries. Cheap: hits the partial index on expires_at. */
+  /** Lazy-delete expired entries. Cheap: hits the partial index on expires_at.
+   * Wrap expires_at in datetime() so it works for BOTH the SQLite native format
+   * (used when entries are created via raw SQL) AND the ISO format with 'T' and
+   * 'Z' (used when entries are created via state.set() from JS). Without the
+   * datetime() wrap, ISO-format entries never expire because string comparison
+   * against "datetime('now')" fails ('T' > ' '). */
   private expireSweep(): void {
-    this.db.run(`DELETE FROM state WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')`);
+    this.db.run(
+      `DELETE FROM state WHERE expires_at IS NOT NULL AND datetime(expires_at) <= datetime('now')`,
+    );
   }
 
   list(namespace?: string, prefix?: string): StateEntry[] {
@@ -120,6 +127,7 @@ export class StateService {
     expected: string | null,
     newValue: string,
     updatedBy: string,
+    ttlSeconds?: number,
   ): boolean {
     return this.db.transaction(() => {
       const current = this.get(namespace, key);
@@ -130,7 +138,7 @@ export class StateService {
       if (newValue === '') {
         this.delete(namespace, key);
       } else {
-        this.set(namespace, key, newValue, updatedBy);
+        this.set(namespace, key, newValue, updatedBy, ttlSeconds);
       }
       return true;
     });

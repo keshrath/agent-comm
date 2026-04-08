@@ -438,6 +438,18 @@ describe('Concurrent-like operations', () => {
     expect(ctx.state.compareAndSwap('default', 'lock', 'free', 'agent2', a2.id)).toBe(false);
   });
 
+  it('CAS with TTL: claim auto-expires so a dead agent does not hold the lock', async () => {
+    const a1 = ctx.agents.register({ name: 'cas-ttl-1' });
+    const a2 = ctx.agents.register({ name: 'cas-ttl-2' });
+    // a1 claims with a very short TTL
+    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a1.name, a1.id, 1)).toBe(true);
+    // a2's immediate claim must fail because a1 holds the lock
+    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a2.name, a2.id, 1)).toBe(false);
+    // After the TTL expires, a2's claim succeeds (lazy expiry on get)
+    await new Promise((r) => setTimeout(r, 1100));
+    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a2.name, a2.id, 60)).toBe(true);
+  });
+
   it('same-name registration blocked while active, allowed after unregister', () => {
     const a1 = ctx.agents.register({ name: 'race-name' });
     expect(() => ctx.agents.register({ name: 'race-name' })).toThrow('already registered');
