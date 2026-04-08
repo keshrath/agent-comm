@@ -176,7 +176,7 @@ Hooks automate the agent lifecycle — registration, inbox checks, and cleanup. 
 
 ### Claude Code Hooks
 
-agent-comm ships with four hook scripts across six events (including subagent lifecycle). Run `npm run setup` to install them, or configure manually in `~/.claude/settings.json`:
+agent-comm ships with **five** hook scripts across eight events (lifecycle + system-layer file coordination). Run `npm run setup` to install them, or configure manually in `~/.claude/settings.json`:
 
 ```json
 {
@@ -246,6 +246,30 @@ agent-comm ships with four hook scripts across six events (including subagent li
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/path/to/agent-comm/scripts/hooks/file-coord.mjs\" PreToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/path/to/agent-comm/scripts/hooks/file-coord.mjs\" PostToolUse",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
@@ -287,6 +311,53 @@ Asks the agent to post a work summary to `#general` and call `comm_agents({ acti
 
 Reuses the same `on-stop.js` script for subagents. Ensures subagents post a summary and unregister when they finish, rather than lingering as "online" until the heartbeat reaper marks them offline.
 
+#### PreToolUse + PostToolUse — `scripts/hooks/file-coord.mjs`
+
+**The system-layer file coordination hook.** This is the most important hook for multi-agent workflows because it enforces coordination at the tool layer instead of relying on the model to remember to call MCP tools. v3-v6 of the bench (see `bench/README.md`) proved that prompt-only coordination is unreliable: Claude follows procedural instructions for the first claim cycle then drifts back to "be helpful, finish the task." A hook removes the choice — there's no way to Edit a file without going through it.
+
+**How it works:**
+
+1. **PreToolUse** fires before every `Edit`/`Write`/`MultiEdit` call. The hook reads the target `file_path` from the tool input, then makes a `POST /api/state/file-locks/<path>/cas` request to the agent-comm dashboard with `expected: null` and `new_value: <agent-id>`. If the CAS succeeds, the hook exits 0 and the edit proceeds. If another agent already holds the lock, the hook exits 2 with a stderr message like `BLOCKED: agent-comm file lock held by "agent-X" on routes.js. Wait, coordinate via comm_send to that agent, or pick a different file.` Claude Code surfaces this to the model, which typically reacts by calling `comm_send` or trying a different file.
+2. **PostToolUse** fires after the edit completes. The hook releases the lock with `DELETE /api/state/file-locks/<path>` and records the edit in the `files-edited` world-model namespace as `<agent-id>@<timestamp>` so other agents can see who recently touched what.
+
+**Identity (`AGENT_COMM_ID`):**
+
+The hook needs a stable per-agent identifier. It resolves identity in this order:
+
+1. `AGENT_COMM_ID` env var (set explicitly by the user, the bench driver, or your subagent spawning code)
+2. `CLAUDE_CODE_SESSION_ID` (if Claude Code provides one)
+3. `<hostname>-<ppid>` — the parent process pid, which is the Claude Code process itself. Stable for the lifetime of the session and unique per process, so two parallel Claude sessions get different IDs without any setup.
+
+For most users, **the default works without any environment configuration.** If you want a more readable identifier on the dashboard, set `AGENT_COMM_ID` in your shell rc:
+
+```bash
+# in ~/.bashrc or ~/.zshrc
+export AGENT_COMM_ID="$USER-$(hostname -s)-$$"
+```
+
+**Configuration env vars:**
+
+| Variable                     | Default        | Description                                        |
+| ---------------------------- | -------------- | -------------------------------------------------- |
+| `AGENT_COMM_ID`              | hostname-ppid  | Stable identifier for this agent in the lock value |
+| `AGENT_COMM_HOST`            | `localhost`    | Dashboard host                                     |
+| `AGENT_COMM_PORT`            | `3421`         | Dashboard port                                     |
+| `AGENT_COMM_LOCK_NAMESPACE`  | `file-locks`   | Namespace for the lock state entries               |
+| `AGENT_COMM_FILES_NAMESPACE` | `files-edited` | Namespace for the post-edit world model entries    |
+| `AGENT_COMM_LOCK_TTL`        | `300`          | Lock TTL in seconds (auto-release if hook crashes) |
+
+**Fail-open behavior:**
+
+If the agent-comm dashboard isn't running or isn't reachable within ~1.5s, the hook returns "allow" so it never blocks real work. This means it's safe to install permanently — you only get coordination when the bus is up, and you get normal Claude Code behavior when it isn't.
+
+**When to use it:**
+
+- **Always**, if you ever spawn more than one Claude Code session against the same project (multiple terminals, parallel subagent fan-outs, multi-machine workflows)
+- **Always**, if you use the Task tool / subagent fan-out for parallel feature work
+- **Skip** if you only ever run a single Claude Code session at a time on isolated work — the hook is wasted overhead in that case
+
+**Bench measurement** (3 agents on 1 shared file, 2 routes each): hooked is **56% cheaper, 37% faster, 130% more efficient** than naive parallel multi-agent, AND deterministic where naive is unstable. See `bench/README.md` for the v7 details.
+
 ### OpenCode Plugins
 
 OpenCode supports lifecycle hooks via JavaScript/TypeScript plugins. Create a plugin in `.opencode/plugins/` or `~/.config/opencode/plugins/`:
@@ -316,9 +387,74 @@ Available events: `session.created`, `session.idle`, `tool.execute.before`, `too
 
 Combine with `AGENTS.md` instructions (see below).
 
+#### file-coord for OpenCode
+
+The `scripts/hooks/file-coord.mjs` script is host-agnostic — it reads tool-call JSON from stdin and exits with `0` (allow) or `2` (block). OpenCode's plugin API doesn't surface the same exit-code blocking semantics as Claude Code, so the recommended pattern is to **wrap** the lock check inside an OpenCode `tool.execute.before` event handler. The pattern:
+
+```typescript
+// .opencode/plugins/agent-comm-file-coord.ts
+import type { Plugin } from '@opencode-ai/plugin';
+import { spawn } from 'node:child_process';
+
+const HOOK = '/path/to/agent-comm/scripts/hooks/file-coord.mjs';
+
+function callFileCoord(event: 'PreToolUse' | 'PostToolUse', toolName: string, filePath: string) {
+  return new Promise<{ allowed: boolean; message?: string }>((resolve) => {
+    const proc = spawn('node', [HOOK, event], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stderr = '';
+    proc.stderr.on('data', (d) => (stderr += d.toString()));
+    proc.on('close', (code) => resolve({ allowed: code === 0, message: stderr }));
+    proc.stdin.write(JSON.stringify({ tool_name: toolName, tool_input: { file_path: filePath } }));
+    proc.stdin.end();
+  });
+}
+
+export const FileCoordPlugin: Plugin = async () => ({
+  event: async (event) => {
+    if (event.type === 'tool.execute.before' && /^(Edit|Write|MultiEdit)$/.test(event.tool ?? '')) {
+      const result = await callFileCoord('PreToolUse', event.tool, event.input?.file_path ?? '');
+      if (!result.allowed) throw new Error(result.message ?? 'file lock held by another agent');
+    }
+    if (event.type === 'tool.execute.after' && /^(Edit|Write|MultiEdit)$/.test(event.tool ?? '')) {
+      await callFileCoord('PostToolUse', event.tool, event.input?.file_path ?? '');
+    }
+  },
+});
+```
+
+The hook itself doesn't care which host launched it — the same `file-coord.mjs` script that powers Claude Code coordination also works for any client that can shell out to a Node process around tool calls. **This is the value of keeping hooks host-agnostic.**
+
 ### Cursor and Windsurf
 
-Cursor and Windsurf don't support lifecycle hooks. Use the client's system prompt / instructions file instead (see [Agent Rules](#agent-rules) below).
+Cursor and Windsurf don't expose pre/post tool-call hooks at the time of writing, so the file-coord hook **cannot be installed there** — there's no extension point to plug it into. Two workarounds:
+
+1. **Use the agent-comm dashboard for visibility, not enforcement.** Cursor/Windsurf agents can still call `mcp__agent-comm__comm_state` via MCP tools to claim and release locks, but compliance depends on the model following instructions in `.cursorrules` / `.windsurfrules`. v3-v6 of our bench shows this is unreliable on its own.
+2. **Run a one-shot wrapper** outside Cursor/Windsurf. Have a watchdog Node process tail the editor's edit events (via filesystem watcher or LSP) and call `file-coord.mjs` from there. This is more brittle but recovers some of the safety net.
+
+For the cleanest experience on these platforms, use the **shared state + dashboard** for ad-hoc visibility and accept that file-level coordination is not enforced. If you need hard enforcement, switch to a host that supports tool-call hooks (Claude Code, OpenCode).
+
+### Codex CLI, Aider, Continue.dev
+
+Same situation as Cursor/Windsurf at the moment: no pre-tool-call hook extension point. Use the MCP tools for ad-hoc coordination via `comm_state` and rely on the dashboard for visibility. If your client gains a pre-tool-use hook in the future, the same `file-coord.mjs` script drops in unchanged.
+
+### Generic / custom MCP clients
+
+If you're building your own MCP client, the integration recipe is two functions:
+
+```pseudo
+beforeEdit(filePath, agentId):
+  POST http://localhost:3421/api/state/file-locks/{filePath}/cas
+       {expected: null, new_value: agentId, updated_by: agentId, ttl_seconds: 300}
+  if response.swapped == false:
+    raise BlockedByLock(holder=response.current.value)
+
+afterEdit(filePath, agentId):
+  DELETE http://localhost:3421/api/state/file-locks/{filePath}
+  POST http://localhost:3421/api/state/files-edited/{filePath}
+       {value: "{agentId}@{timestamp}", updated_by: agentId}
+```
+
+Wire those into your tool-call lifecycle (whatever it looks like in your client) and you have the same enforcement primitive that Claude Code and OpenCode use. The REST API is documented in [docs/API.md](API.md).
 
 ---
 

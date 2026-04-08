@@ -33,7 +33,16 @@ const HOST = process.env.AGENT_COMM_HOST ?? 'localhost';
 const LOCK_NS = process.env.AGENT_COMM_LOCK_NAMESPACE ?? 'file-locks';
 const FILES_NS = process.env.AGENT_COMM_FILES_NAMESPACE ?? 'files-edited';
 const TTL = parseInt(process.env.AGENT_COMM_LOCK_TTL ?? '300', 10);
-const AGENT_ID = process.env.AGENT_COMM_ID ?? `${hostname()}-${process.pid}`;
+// Identity resolution order:
+//   1. AGENT_COMM_ID env var (set explicitly by the user or driver)
+//   2. CLAUDE_CODE_SESSION_ID if Claude Code provides one
+//   3. hostname-ppid (the parent process — Claude Code itself — has a stable
+//      pid for the lifetime of the session, so PreToolUse and PostToolUse for
+//      the same edit see the same ppid)
+const AGENT_ID =
+  process.env.AGENT_COMM_ID ??
+  process.env.CLAUDE_CODE_SESSION_ID ??
+  `${hostname()}-${process.ppid || process.pid}`;
 // Claude Code passes the hook event name as the first arg or HOOK_EVENT env var
 // depending on version. Accept either.
 const EVENT = process.argv[2] ?? process.env.CLAUDE_HOOK_EVENT ?? 'PreToolUse';

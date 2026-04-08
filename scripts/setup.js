@@ -148,6 +148,36 @@ if (existsSync(SETTINGS_JSON)) {
   addHook('UserPromptSubmit', checkRegHook);
   addHook('Stop', stopHook);
 
+  // ----- file-coord hook (system-layer file lock enforcement) -----
+  // Adds PreToolUse + PostToolUse hooks matched on Edit|Write|MultiEdit so
+  // that parallel agents on the same shared file serialize via comm_state
+  // CAS instead of clobbering each other. See bench/README.md (v7) for the
+  // measurement showing this is 56% cheaper, 37% faster, and deterministic
+  // compared to naive parallel multi-agent on shared files.
+  const fileCoordPath = join(hookDir, 'file-coord.mjs');
+  function addMatchedHook(eventName, matcher, command) {
+    if (!settings.hooks[eventName]) settings.hooks[eventName] = [];
+    const hookGroups = settings.hooks[eventName];
+    const existing = hookGroups.find(
+      (g) =>
+        g.matcher === matcher &&
+        g.hooks &&
+        g.hooks.some((h) => h.command && h.command.includes('file-coord')),
+    );
+    if (existing) {
+      console.log(`  ${eventName} (${matcher}): file-coord already configured`);
+      return;
+    }
+    hookGroups.push({
+      matcher,
+      hooks: [{ type: 'command', command, timeout: 5 }],
+    });
+    console.log(`  ${eventName} (${matcher}): added file-coord hook`);
+  }
+
+  addMatchedHook('PreToolUse', 'Edit|Write|MultiEdit', `node "${fileCoordPath}" PreToolUse`);
+  addMatchedHook('PostToolUse', 'Edit|Write|MultiEdit', `node "${fileCoordPath}" PostToolUse`);
+
   writeFileSync(SETTINGS_JSON, JSON.stringify(settings, null, 2));
   console.log('  Saved settings.json');
 } else {
@@ -161,6 +191,10 @@ Restart Claude Code to load the new MCP server. The agent will automatically:
   - Register on startup (SessionStart hook)
   - Join the "general" channel and announce its work
   - Check inbox for messages from other agents
+  - Coordinate file edits via the file-coord PreToolUse/PostToolUse hook
+    (parallel agents claim files via comm_state CAS before editing — see
+    bench/README.md v7 for the measurement: 56% cheaper, 37% faster than
+    naive parallel multi-agent on shared files)
   - Post a summary and unregister on stop
 
 Dashboard: http://localhost:3421 (auto-starts on first MCP connection)

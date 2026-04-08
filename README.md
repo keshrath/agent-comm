@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-253%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-288%20passing-brightgreen)]()
 [![MCP Tools](https://img.shields.io/badge/MCP%20tools-7-purple)]()
 [![REST Endpoints](https://img.shields.io/badge/REST-29%20endpoints-orange)]()
 
@@ -33,9 +33,25 @@ When you run multiple AI agents on the same codebase — code review in one term
 - They share **state** (a key-value store with atomic CAS) for locks, flags, and progress
 - They log **activity events** (commits, test results, file edits) to a shared feed
 - They detect **stuck agents** — alive (heartbeat OK) but not making progress
+- They **serialize file edits** via the system-layer `file-coord` hook (see below) so parallel agents on shared files cannot clobber each other
 - A **web dashboard** shows everything in real time, including an Activity Feed tab
 
 It works with any agent that supports [MCP](https://modelcontextprotocol.io/) (stdio transport) or can make HTTP requests (REST API).
+
+### Why hooks, not just MCP tools
+
+The MCP tools (`comm_state`, etc.) give agents the _primitives_ to coordinate, but they don't _enforce_ coordination — the agent has to remember to call them. Our [bench](bench/README.md) (v3–v6) measured what happens when you rely on the model's discretion: **even with strict procedural prompting, Claude follows the protocol on the first claim cycle then drifts back to "be helpful, finish the task."** Soft coordination is unreliable.
+
+The fix is the **`file-coord` hook** (v1.3.0): a `PreToolUse`/`PostToolUse` hook that intercepts every `Edit`/`Write`/`MultiEdit`, claims the file via REST `POST /api/state/file-locks/<path>/cas`, and blocks the edit if another agent already holds the lock. **The protocol becomes infrastructure, not a prompt the agent might ignore.** Bench v7 measured this on 3 parallel agents editing one shared file:
+
+|             | naive parallel                            | **with file-coord hook** |
+| ----------- | ----------------------------------------- | ------------------------ |
+| Coverage    | 6/6 (lucky — earlier rounds got 2/6, 4/6) | **6/6 (deterministic)**  |
+| Wall time   | 58.9s                                     | **37.1s (-37%)**         |
+| Total cost  | $1.533                                    | **$0.669 (-56%)**        |
+| Reliability | unstable                                  | **deterministic**        |
+
+The hook is **faster AND cheaper**, not just safer. Reason: when agents lack coordination on shared files, they read stale state, get confused mid-edit, retry, and re-think. Serializing access cleanly removes that wasted thinking. Run `npm run setup` to install the hook automatically; see [Setup → File Coordination](docs/SETUP.md#pretooluse--posttooluse--scriptshooksfile-coordmjs) for manual install on Claude Code, OpenCode, or any custom MCP client.
 
 ```mermaid
 graph TD
@@ -141,6 +157,7 @@ GET  /api/export                          Full database export as JSON
 
 POST   /api/messages                      Send a message (body: {from, to?, channel?, content})
 POST   /api/state/:namespace/:key         Set state (body: {value, updated_by})
+POST   /api/state/:namespace/:key/cas     Atomic compare-and-swap (file-coord hook uses this)
 DELETE /api/messages                       Purge all messages
 DELETE /api/messages                       Delete messages by filter
 DELETE /api/messages/:id                   Delete a message (body: {agent_id})
@@ -213,7 +230,7 @@ The web dashboard auto-starts at **http://localhost:3421** and shows agents, mes
 ## Testing
 
 ```bash
-npm test              # 253 tests across 13 files
+npm test              # 288 tests across 16 files
 npm run test:watch    # Watch mode
 npm run test:e2e      # E2E tests only
 npm run test:coverage # Coverage report

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-08
+
+### Added
+
+- **`scripts/hooks/file-coord.mjs`** — system-layer file coordination hook. PreToolUse claims a per-file lock via the new REST `cas` endpoint before any `Edit`/`Write`/`MultiEdit`; PostToolUse releases the lock and records the edit in the `files-edited` world model namespace. Default identity is `hostname-ppid` (stable per Claude session, no setup required), overridable via `AGENT_COMM_ID`. Fail-open if dashboard is down — never blocks real work.
+- **`POST /api/state/:namespace/:key/cas`** — REST endpoint exposing atomic compare-and-swap to external coordinators (the `file-coord` hook is the first consumer, but any tool can use it). Returns `{ swapped: false, current }` on conflict so callers can identify the holder.
+- **`startDashboard` exported from `lib.ts`** — embedded users (e.g. the bench, or any host that wants to spin up the REST/WS layer in-process) can now start the dashboard without going through the MCP stdio entry point.
+- **`bench/workloads/shared-routes`** — the first bench fixture testing shared-file coordination (multiple agents editing one file in the same directory). Bench v7 measured the file-coord hook as 56% cheaper, 37% faster, and deterministic vs naive parallel multi-agent.
+- **`scripts/setup.js`** now installs the file-coord hook (PreToolUse + PostToolUse on `Edit|Write|MultiEdit`) automatically when run against Claude Code.
+- Documentation: detailed hook explanation in `docs/SETUP.md` (Claude Code, OpenCode plugin recipe, Cursor/Windsurf workarounds, Codex/Aider/Continue notes, generic MCP-client integration sketch). README highlights the v1.3.0 coordination story prominently.
+- 4 new tests covering CAS-with-TTL expiry, REST cas success, REST cas conflict, and REST cas validation.
+
+### Fixed
+
+- **Pre-existing TTL expiry bug** in `state.expireSweep`. `expires_at` was stored from JS as ISO format (`2026-04-08T16:54:49.029Z`) but compared as strings against SQLite's `datetime('now')` (`2026-04-08 16:54:49`). Since `'T' > ' '`, **JS-set TTL entries never actually expired**. Fixed by wrapping `expires_at` in `datetime()` in the sweep query so both formats normalize. This was almost certainly causing real lock leaks in any workflow that used TTLs.
+- `compareAndSwap` and the MCP `cas` action now accept `ttl_seconds`, so locks claimed via cas can auto-expire on agent crash.
+
+### Why this is a minor bump (1.3.0, not 1.2.x)
+
+The file-coord hook is a new architectural layer that fundamentally changes how multi-agent coordination works in agent-comm — from "MCP tools the model may choose to call" to "infrastructure the model operates within." The bench history (v3-v6 negative results, v7 positive result) is in `bench/README.md`; this is the first release where the project has empirical evidence that multi-agent + agent-comm beats naive multi-agent on a real workload.
+
 ## [1.2.29] - 2026-04-08
 
 ### Documentation
