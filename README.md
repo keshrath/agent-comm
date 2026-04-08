@@ -40,24 +40,31 @@ It works with any agent that supports [MCP](https://modelcontextprotocol.io/) (s
 
 ### Why hooks, not just MCP tools
 
-The MCP tools (`comm_state`, etc.) give agents the _primitives_ to coordinate, but they don't _enforce_ coordination — the agent has to remember to call them. Our [bench](bench/README.md) (v3–v6) measured what happens when you rely on the model's discretion: **even with strict procedural prompting, Claude follows the protocol on the first claim cycle then drifts back to "be helpful, finish the task."** Soft coordination is unreliable.
+The MCP tools (`comm_state`, etc.) give agents the _primitives_ to coordinate, but they don't _enforce_ coordination — the agent has to remember to call them. Our [bench](bench/README.md) measured what happens when you rely on the model's discretion: **even with strict procedural prompting, Claude follows the protocol on the first claim cycle then drifts back to "be helpful, finish the task."** Soft coordination is unreliable.
 
-The fix is the **`file-coord` hook** (v1.3.0): a `PreToolUse`/`PostToolUse` hook that intercepts every `Edit`/`Write`/`MultiEdit`, claims the file via REST `POST /api/state/file-locks/<path>/cas`, and blocks the edit if another agent already holds the lock. **The protocol becomes infrastructure, not a prompt the agent might ignore.** Bench v7 measured this on 3 parallel agents editing one shared file:
+The fix is a pair of `PreToolUse` hooks shipped in `scripts/hooks/`: **`file-coord`** intercepts every `Edit`/`Write`/`MultiEdit` and claims the file via REST `POST /api/state/file-locks/<path>/cas` (blocks the edit if another agent holds the lock); **`bash-guard`** intercepts `git commit`, `git push`, `npm install`, `npm test`, builds, migrations, and dev-server starts and blocks/warns when they would conflict with another session's WIP. **The protocol becomes infrastructure, not a prompt the agent might ignore.**
 
-|             | naive parallel                            | **with file-coord hook** |
-| ----------- | ----------------------------------------- | ------------------------ |
-| Coverage    | 6/6 (lucky — earlier rounds got 2/6, 4/6) | **6/6 (deterministic)**  |
-| Wall time   | 58.9s                                     | **37.1s (-37%)**         |
-| Total cost  | $1.533                                    | **$0.669 (-56%)**        |
-| Reliability | unstable                                  | **deterministic**        |
+The bench's headline pilot is **`multi-term-commit`** — directly modeling the daily pain of two terminal sessions on the same project. Session A edits two files but doesn't commit. Session B then edits two other files and runs `git commit -am "my work"`. Without the hook, B's commit silently includes A's WIP. With the hook, B's commit is blocked at the bash layer with an actionable message, and B reacts (selective staging, restore, or coordinate). Bench v1.3.4 result:
 
-The hook is **faster AND cheaper**, not just safer. Reason: when agents lack coordination on shared files, they read stale state, get confused mid-edit, retry, and re-think. Serializing access cleanly removes that wasted thinking. Run `npm run setup` to install the hook automatically; see [Setup → File Coordination](docs/SETUP.md#pretooluse--posttooluse--scriptshooksfile-coordmjs) for manual install on Claude Code, OpenCode, or any custom MCP client.
+|               | naive (no hook)                            | **with hooks**            |
+| ------------- | ------------------------------------------ | ------------------------- |
+| Commit purity | **MIXED** — bar.js, baz.js, foo.js, qux.js | **PURE — baz.js, qux.js** |
+| Wall time     | 91.0s                                      | **78.8s (-13%)**          |
+| Total cost    | $0.774                                     | **$0.591 (-24%)**         |
+| Outcome       | A's WIP silently committed under B's name  | clean commit, no clobber  |
+
+The hook is **faster AND cheaper**, not just safer. Reason: when agents lack coordination on shared workspaces, they read stale state, get confused mid-task, retry, and re-think. Serializing access and surfacing the conflict early removes that wasted thinking. Run `npm run setup` to install both hooks automatically; see [Setup → File Coordination](docs/SETUP.md#pretooluse--posttooluse--scriptshooksfile-coordmjs) for manual install on Claude Code, OpenCode, or any custom MCP client.
+
+### How agent-comm fits together
+
+`agent-comm` is a single Node process that exposes three transports — MCP stdio (for AI hosts), REST + WebSocket (for hooks, dashboards, custom scripts) — backed by a SQLite database in WAL mode. Hooks installed in your Claude Code (or other host) settings call the REST endpoint at `localhost:3421` to claim file locks, query who-edited-what, and broadcast presence. The dashboard UI at the same port is a live view of every agent, message, channel, and shared-state entry. Multiple AI hosts can connect simultaneously and see the same world.
 
 ```mermaid
 graph TD
     A["Agent A<br/>(Claude Code)"] -->|MCP stdio| COMM
     B["Agent B<br/>(Codex CLI)"] -->|MCP stdio| COMM
     C["Agent C<br/>(Custom script)"] -->|REST API| COMM
+    HK["PreToolUse hooks<br/>(file-coord, bash-guard)"] -->|REST cas| COMM
 
     subgraph COMM["agent-comm"]
         D["Agents<br/>Register, discover, heartbeat"]
