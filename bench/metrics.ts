@@ -203,6 +203,8 @@ export interface BenchReport {
   mean_total_cost_usd: number;
   /** Headline efficiency: unique units / total dollars. 0 if cost or units missing. */
   units_per_dollar: number;
+  /** Mean wall-clock time of the whole run in seconds. */
+  mean_wall_seconds: number;
 }
 
 export function aggregate(runs: MultiAgentRun[]): BenchReport {
@@ -255,5 +257,6 @@ export function aggregate(runs: MultiAgentRun[]): BenchReport {
     mean_unique_units: meanUnique,
     mean_total_cost_usd: meanCost,
     units_per_dollar: unitsPerDollar,
+    mean_wall_seconds: runs.reduce((s, r) => s + r.total_wall_ms, 0) / runs.length / 1000,
   };
 }

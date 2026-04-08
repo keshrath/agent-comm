@@ -99,10 +99,10 @@ function formatReport(r: BenchReport): string {
   return [
     `  ${r.condition.padEnd(16)} n=${r.n_runs}`,
     `    unique_units           ${r.mean_unique_units.toFixed(1)}`,
+    `    wall_seconds           ${r.mean_wall_seconds.toFixed(1)}s`,
     `    total_cost_usd         $${r.mean_total_cost_usd.toFixed(3)}`,
     `    units_per_dollar       ${r.units_per_dollar.toFixed(2)}`,
     `    file_collision_rate    ${pct(r.file_collision_rate)}`,
-    `    duplicate_subgoal_rate ${pct(r.duplicate_subgoal_rate)}`,
     `    individual_pass_rate   ${pct(r.individual_pass_rate)}`,
     `    mean_parallelism       ${r.mean_parallelism.toFixed(2)}x`,
   ].join('\n');
@@ -130,61 +130,88 @@ async function main(): Promise<void> {
     return;
   }
 
-  // ----- v3 pilot: algos-6, harder per-unit work --------------------------
-  // 6 algorithm-tier problems in 6 files. Each function is a non-trivial
-  // implementation that requires real reasoning per case (CSV parsing, Roman
-  // numerals, LCS, email validation, number formatting, word wrap). Goal:
-  // raise per-function "real work" cost from ~$0.018 (v2 string-utils-6) to
-  // $0.05-$0.15, putting us above the v2 crossover threshold of ~$0.0625
-  // where locks should start beating duplication.
-  const fixtureDir = path.resolve('bench/workloads/algos-6');
+  // ----- v6 pilot: algos-12, scale up to make multi-agent's case --------
+  // 12 algorithm-tier problems. At N=12 the per-agent fixed overhead amortizes
+  // and parallelism should give multi-agent a clear wall-time win over solo
+  // (crossover math from v5 says T_impl > 5.75s/function does it; algos-12 is
+  // ~6-10s/function and N=12 makes solo serial work dominate).
+  const fixtureDir = path.resolve('bench/workloads/algos-12');
+  const expectedFiles = [
+    'csv-parse.js',
+    'format-number.js',
+    'word-wrap.js',
+    'roman.js',
+    'lcs.js',
+    'email-validate.js',
+    'base64-encode.js',
+    'base64-decode.js',
+    'balanced-parens.js',
+    'runlen-encode.js',
+    'roman-from.js',
+    'flatten.js',
+  ];
   const driver = makeCliDriver({
     fixtureDir,
     testCmd: 'node test.js',
     maxBudgetUsd: 0.8,
-    expectedFiles: [
-      'csv-parse.js',
-      'format-number.js',
-      'word-wrap.js',
-      'roman.js',
-      'lcs.js',
-      'email-validate.js',
-    ],
+    expectedFiles,
   });
 
   const task: WorkloadTask = {
-    task_id: 'algos-6-pilot',
-    workload: 'algos-6',
-    target: 'bench/workloads/algos-6',
+    task_id: 'algos-12-pilot',
+    workload: 'algos-12',
+    target: 'bench/workloads/algos-12',
     prompt:
-      'There are 6 TODO functions, each in its own file in this directory: ' +
-      'csv-parse.js (parseRow), format-number.js (formatNumber), word-wrap.js ' +
-      '(wordWrap), roman.js (toRoman), lcs.js (longestCommonSubstring), ' +
-      'email-validate.js (isValidEmail). Each file contains a comment block ' +
-      'with the full spec and examples — read it before implementing. Implement ' +
-      'as many as you can within your budget. Verify by running `node test.js`. ' +
-      'You are running in parallel with other agents on copies of the same fixture; ' +
-      'follow any coordination instructions present.',
+      'There are 12 TODO functions, each in its own file in this directory: ' +
+      expectedFiles.join(', ') +
+      '. Each file contains a comment block with the full spec and examples — ' +
+      'read it before implementing. Implement as many as you can within your budget. ' +
+      'Verify by running `node test.js`. You are running in parallel with other ' +
+      'agents on copies of the same fixture; follow any coordination instructions present.',
   };
 
-  const N_RUNS = 2;
+  // ----- v6: solo vs multi-agent on algos-12 -----------------------------
+  // At N=12 functions, the per-agent overhead has more work to amortize against,
+  // and parallelism should give multi-agent the wall-time win it lacked at N=6.
+  // 1 run per condition for the pilot (~$6); replicate only if the result is
+  // clear and we want statistical confidence.
+  const N_RUNS = 1;
+
+  const soloDriver = makeCliDriver({
+    fixtureDir,
+    testCmd: 'node test.js',
+    maxBudgetUsd: 1.5,
+    expectedFiles,
+  });
+
+  console.log(`agent-comm bench (REAL driver) — v6: algos-12, solo vs multi, ${N_RUNS} run/cond`);
   console.log(
-    `agent-comm bench (REAL driver) — v4: algos-6, N=3, 3 conditions, ${N_RUNS} runs/cond`,
-  );
-  console.log(
-    `Per-agent budget cap: $0.80. Worst case total: 3*3*${N_RUNS} = ${3 * 3 * N_RUNS} agents × $0.80 = $${(3 * 3 * N_RUNS * 0.8).toFixed(2)}.\n`,
+    `Solo cap $1.50, multi cap $0.80. Worst case: ${1 * N_RUNS}*$1.50 + ${3 * 3 * N_RUNS}*$0.80 = $${(1 * N_RUNS * 1.5 + 3 * 3 * N_RUNS * 0.8).toFixed(2)}.\n`,
   );
 
-  const reports = await runWorkload({
-    workload: 'algos-6',
+  const soloReports = await runWorkload({
+    workload: 'algos-12',
+    tasks: [task],
+    n_agents: 1,
+    driver: soloDriver,
+    conditions: ['control'],
+    n_runs: N_RUNS,
+  });
+  const soloReport = { ...soloReports[0], condition: 'control' as const };
+
+  const multiReports = await runWorkload({
+    workload: 'algos-12',
     tasks: [task],
     n_agents: 3,
     driver,
-    conditions: ['control', 'bus-and-locks', 'pipeline-claim'],
+    conditions: ['control', 'pipeline-claim'],
     n_runs: N_RUNS,
   });
 
-  for (const r of reports) console.log(formatReport(r), '\n');
+  console.log('\n=== SOLO (1 agent, $1.50 cap) ===');
+  console.log(formatReport(soloReport), '\n');
+  console.log('=== MULTI (3 agents, $0.80 cap each) ===');
+  for (const r of multiReports) console.log(formatReport(r), '\n');
 }
 
 main().catch((e) => {

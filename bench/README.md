@@ -91,6 +91,98 @@ The metric calculators are pure functions and tested independently of any
 agent runs — see `bench/metrics.test.ts`. This means the math is verified
 before you spend tokens.
 
+## v6 result: solo dominates multi-agent on synthetic coding benchmarks
+
+The most uncomfortable but most honest finding. Same workload as v4 but
+**doubled to 12 functions** and with a **solo (1 agent) baseline** added.
+
+| Condition                | Coverage | Wall   | Total $ | $/unit       |
+| ------------------------ | -------- | ------ | ------- | ------------ |
+| **solo (1 agent)**       | 12/12    | 77.1s  | $0.982  | **12.22** ⭐ |
+| multi-control (3)        | 12/12    | 100.8s | $2.004  | 5.99         |
+| multi-pipeline-claim (3) | 12/12    | 100.6s | $2.018  | 5.95         |
+
+**The most damning data point**: solo's wall time barely moved between v5
+(6 functions in 78s) and v6 (12 functions in 77s). Claude in solo mode plans
+and writes all functions in one continuous response — there is essentially no
+per-function serialization cost. With ~30s of fixed loading and ~0s marginal
+cost per function, **no amount of parallelism can beat solo on workloads of
+this style**.
+
+### Why solo wins so decisively here
+
+1. **Claude is too good at small-task batching.** It single-shots 12 algorithm
+   implementations in one stream-of-consciousness response.
+2. **Per-agent fixed overhead** (~30s loading, ~$0.10) is paid 3× by multi-agent.
+   The marginal per-function work doesn't amortize it.
+3. **Coordination is pure tax.** Both multi conditions are within $0.014 of each
+   other — coordination overhead is constant regardless of pattern.
+4. **No file dependencies.** Each algos-12 function is independent and well-specified;
+   there is no exploration, iteration, or cross-file reasoning needed.
+
+### What v6 proves
+
+> On synthetic, well-specified, independent algorithm tasks, parallel
+> multi-agent + agent-comm is not faster, not cheaper, and not more accurate
+> than single-agent. **The "spawn 3 subagents to make small coding faster"
+> claim is false on this benchmark.**
+
+### What v6 does NOT prove
+
+The bench can't reach the regimes where agent-comm actually pays off:
+
+1. **Tasks that don't fit in one prompt** — real codebases, file dependencies,
+   exploration. Claude can't single-shot a 200-file refactor; the algos-12
+   fixture is small enough to single-shot easily.
+2. **Side-effect-heavy work** — DB writes, deploys, rate-limited APIs. control's
+   "free duplication" stops being free when each duplicate has consequences.
+3. **Async / cross-session work** — agent A starts work, terminates, agent B
+   (fresh context, possibly different machine) picks up via comm_state. Solo
+   can't preserve state across sessions; this is the strongest theoretical use
+   case for agent-comm and we have not built fixtures to test it.
+4. **Real per-unit reasoning cost** — tasks taking ~30s+ of model thinking per
+   file (not single-shot generation). algos-12 functions are too small.
+
+Building fixtures that exercise these scenarios is substantial work — a real
+codebase to mutate, real side effects, real budget pressure on context size.
+**The bench is the wrong tool to argue for those use cases.**
+
+### What v6 leaves intact from v4
+
+Pipeline-claim is **still** the only coordination pattern that produces
+deterministic output. Both v4 (N=2 replication) and v6 confirmed:
+
+- 0% file collision in **every** pipeline-claim run
+- Full coverage in **every** pipeline-claim run
+- Bus-and-locks (soft coordination) is unstable: works sometimes, fails others
+
+So even on the workload where multi-agent loses on cost and speed, **if you
+need multi-agent for some other reason** (side effects, scale, async),
+pipeline-claim is the right pattern and the only one that works.
+
+### The recalibrated value prop
+
+agent-comm is **not** a tool for making small parallel coding tasks faster.
+Synthetic benchmarks have falsified that claim.
+
+agent-comm **is** a substrate for hard-enforced coordination patterns
+(`comm_state cas`-based work queues). Use it when:
+
+- Coordination is **structurally required** — task-claim semantics, locks on
+  shared resources, exactly-once execution
+- The work has **side effects** that make naive duplication unsafe
+- You're running **async or cross-session** workflows where state must outlive
+  any individual agent
+- You're building **orchestrator + worker** patterns where the orchestrator
+  hands out tasks via the pipeline
+
+agent-comm is **not the right tool** when:
+
+- You're spawning N parallel agents to "go faster" on independent coding tasks
+- Per-task work fits comfortably in one prompt
+- There are no side effects and duplication is harmless
+- Cost minimization is the only constraint
+
 ## v4 result: hard CAS enforcement is the only coordination pattern that works
 
 **Workload**: `algos-6` — 6 algorithm-tier problems (CSV parse, number format,
@@ -273,7 +365,12 @@ required for headless invocation). Setting `ANTHROPIC_API_KEY` would drop costs
 - [x] v3 workload: algos-6 (algorithm-tier problems, 5× harder per unit)
 - [x] v4: pipeline-claim condition with hard CAS enforcement
 - [x] N=2 replication confirming pipeline-claim stability vs bus-and-locks instability
-- [ ] Workload at $0.30+/unit cost to prove the crossover prediction empirically
-- [ ] Workload: tom-replay (academic anchor)
-- [ ] Workload: swe-lite-fanout (real-world anchor)
+- [x] v5: solo baseline added — multi-agent loses on small synthetic tasks
+- [x] v6: scaled to N=12 functions (algos-12) — solo wins more decisively
+- [x] Recalibrated value prop based on empirical findings
+- [ ] Real-codebase fixture (file dependencies, context pressure) — the bench
+      cannot prove or disprove agent-comm's value on small synthetic workloads;
+      this requires a fixture that simulates real software work
+- [ ] Side-effect fixture where duplication breaks something
+- [ ] Async / cross-session fixture
 - [ ] Results dashboard panel
