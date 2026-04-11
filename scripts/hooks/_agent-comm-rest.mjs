@@ -187,7 +187,15 @@ export function filterEditsToWorkspace(edits, workspace) {
   });
 }
 
-/** Filter file-edits to those by agents OTHER than the given one. */
+/** Filter file-edits to those by agents OTHER than the given one.
+ *  Identity is matched by hostname prefix (everything before the last -PID
+ *  segment) so that multiple hook subprocesses from the same Claude Code
+ *  session are treated as "self". */
 export function filterEditsByOthers(edits, selfId) {
-  return edits.filter((e) => e.editor && e.editor !== selfId);
+  const selfPrefix = selfId.replace(/-\d+$/, '');
+  return edits.filter((e) => {
+    if (!e.editor) return false;
+    const editorPrefix = e.editor.replace(/-\d+$/, '');
+    return editorPrefix !== selfPrefix;
+  });
 }

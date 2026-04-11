@@ -1,6 +1,6 @@
 {
   "name": "agent-comm",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Agent-agnostic intercommunication system — sessions, messaging, channels, shared state, and real-time events",
   "type": "module",
   "main": "dist/index.js",

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-04-11
+
+### Fixed
+
+- **`filterEditsByOthers`** (scripts/hooks/\_agent-comm-rest.mjs): multiple hook subprocesses from the same Claude Code session are now correctly treated as "self". Identity is matched by hostname prefix (stripping the trailing `-<PID>` segment) instead of exact equality, so the default `hostname-ppid` identity doesn't cause false-positive "other agent" detection when multiple Edit/Write tool calls spawn separate hook subprocesses within a single session. Session-ID–based identities (UUIDs from `CLAUDE_CODE_SESSION_ID`) are unaffected — UUIDs don't end in pure digits so the prefix strip is a no-op.
+
 ## [1.3.5] - 2026-04-08
 
 ### Changed — workspace-decision pilot now has a third condition
