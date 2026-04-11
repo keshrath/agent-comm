@@ -80,6 +80,7 @@ process.stdin.on('end', () => {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
             additionalContext: parts.join(' '),
           },
         }),

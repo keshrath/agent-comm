@@ -64,6 +64,7 @@ function run() {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
+            hookEventName: 'UserPromptSubmit',
             additionalContext: `No agent-comm session. Call comm_register first, then comm_channel({ action: "join", channel: "general" }).`,
           },
         }),
@@ -72,6 +73,7 @@ function run() {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
+            hookEventName: 'UserPromptSubmit',
             additionalContext: `${onlineAgents} agent(s) online, ${recentMessages} message(s) in last 10 min. Call comm_inbox NOW before starting this work.`,
           },
         }),
@@ -80,6 +82,7 @@ function run() {
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
+            hookEventName: 'UserPromptSubmit',
             additionalContext: `${onlineAgents} agents online. Consider posting a status update to "general" or using comm_state({ action: "set" }) to share your progress.`,
           },
         }),
