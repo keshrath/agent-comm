@@ -2,7 +2,7 @@
   "id": "agent-comm",
   "name": "Communication",
   "icon": "forum",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "description": "Agent communication hub — messages, channels, state, activity feed",
   "ui": "./dist/ui/app.js",
   "css": "./dist/ui/styles.css",

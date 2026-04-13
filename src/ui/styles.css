@@ -275,15 +275,29 @@ body {
 .sidebar-toggle {
   display: none;
   position: fixed;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   z-index: 200;
+  width: 36px;
+  height: 36px;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
   cursor: pointer;
+  color: var(--text-muted);
+  box-shadow: var(--shadow-2);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
   color: var(--text);
+  box-shadow: var(--shadow-3);
 }
 
 .hamburger-icon {
@@ -320,7 +334,7 @@ body {
 
 @media (max-width: 768px) {
   .sidebar-toggle {
-    display: block;
+    display: flex;
   }
 
   #sidebar {
@@ -342,7 +356,14 @@ body {
   }
 
   #content {
-    padding: 56px 16px 24px;
+    padding: 48px 16px 24px;
+  }
+
+  .view h2,
+  .overview-header h2,
+  .split-left-header h2 {
+    padding-left: 40px;
+    font-size: 18px;
   }
 
   .stats-grid {
@@ -368,10 +389,6 @@ body {
 
   .search-input {
     max-width: 100%;
-  }
-
-  .view h2 {
-    font-size: 18px;
   }
 }
 
@@ -1084,7 +1101,7 @@ body {
 }
 
 .sidebar-toggle .material-symbols-outlined {
-  font-size: 24px;
+  font-size: 20px;
 }
 
 /* --------------------------------------------------------------------------
@@ -2072,4 +2089,114 @@ body {
 .branch-meta {
   color: var(--text-dim);
   margin-left: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Mobile Responsive — additional rules (768px + 480px)
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .split-left-header {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+  }
+  .split-left-header h2 {
+    font-size: 16px;
+    width: 100%;
+  }
+  .split-right {
+    min-height: 30vh;
+  }
+  .table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .data-table .value-cell {
+    max-width: 140px;
+  }
+  .overview-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .overview-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .feed-item {
+    padding: 8px 12px;
+  }
+  .feed-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+  .modal {
+    width: calc(100% - 16px);
+    max-width: 100%;
+    margin: 8px;
+  }
+  .toast-container {
+    left: 8px;
+    right: 8px;
+  }
+  .toast {
+    max-width: none;
+  }
+  .view {
+    padding: 16px 12px;
+  }
+  .panel {
+    padding: 12px;
+  }
+  .card {
+    padding: 12px;
+  }
+  .message-content {
+    font-size: 13px;
+  }
+  .message-actions {
+    flex-wrap: wrap;
+  }
+  .handoff-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .handoff-body {
+    padding: 8px;
+  }
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+  .view h2 {
+    font-size: 16px;
+  }
+  .split-left-header {
+    padding: 8px 10px;
+  }
+  .msg-compact {
+    padding: 6px 8px;
+  }
+  .feed-item {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .sidebar-toggle {
+    top: 8px;
+    left: 8px;
+  }
 }
