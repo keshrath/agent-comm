@@ -2096,6 +2096,36 @@ body {
    -------------------------------------------------------------------------- */
 
 @media (max-width: 768px) {
+  /* -- Stats & card grids: full width -- */
+  .stats-grid {
+    max-width: 100%;
+  }
+  .stat-card {
+    max-width: none;
+  }
+  .card-grid {
+    max-width: 100%;
+  }
+  .card {
+    max-width: none;
+    padding: 12px;
+  }
+
+  /* -- Overview header: actions inline with heading -- */
+  .overview-header {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .overview-header h2 {
+    flex: 1;
+    min-width: 0;
+  }
+  .overview-actions {
+    flex-shrink: 0;
+  }
+
+  /* -- Messages: split pane polish -- */
   .split-left-header {
     flex-wrap: wrap;
     gap: 6px;
@@ -2103,39 +2133,93 @@ body {
   }
   .split-left-header h2 {
     font-size: 16px;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
+  #msg-clear {
+    order: 0;
+  }
+  .split-pane .detail-empty {
+    padding: 24px 16px;
+    min-height: 0;
+  }
+  .split-pane .detail-empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
   }
   .split-right {
-    min-height: 30vh;
+    min-height: auto;
+    max-height: 50vh;
+    overflow-y: auto;
   }
+
+  /* -- State table: scroll hint -- */
   .table-scroll-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    position: relative;
+  }
+  .table-scroll-wrapper::after {
+    content: '';
+    position: sticky;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 24px;
+    background: linear-gradient(to right, transparent, var(--bg));
+    pointer-events: none;
+    flex-shrink: 0;
   }
   .data-table th,
   .data-table td {
     padding: 6px 8px;
     font-size: 12px;
+    white-space: nowrap;
   }
   .data-table .value-cell {
-    max-width: 140px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .overview-header {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .overview-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
+
+  /* -- Feed items: stacked layout -- */
   .feed-item {
+    flex-wrap: wrap;
     padding: 8px 12px;
+    gap: 6px;
   }
   .feed-icon {
     width: 28px;
     height: 28px;
     font-size: 14px;
   }
+  .feed-content {
+    width: calc(100% - 40px);
+    min-width: 0;
+  }
+  .feed-type {
+    font-size: 11px;
+  }
+  .feed-agent {
+    word-break: break-word;
+  }
+
+  /* -- Hamburger backdrop -- */
+  .sidebar-toggle {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* -- Icon buttons: touch-friendly -- */
+  .icon-btn {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* -- Modals & toasts -- */
   .modal {
     width: calc(100% - 16px);
     max-width: 100%;
@@ -2148,13 +2232,12 @@ body {
   .toast {
     max-width: none;
   }
+
+  /* -- General spacing -- */
   .view {
     padding: 16px 12px;
   }
   .panel {
-    padding: 12px;
-  }
-  .card {
     padding: 12px;
   }
   .message-content {
