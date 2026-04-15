@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.11] - 2026-04-15
+
+### Fixed
+
+- **`package-lock.json`**: rewrote three `resolved:` URLs that pointed at a private proxy registry (`npm.ng42.net`) back to the canonical `registry.npmjs.org`. `npm ci` on CI was failing with E401 because GitHub Actions has no credential for the private registry.
+
+### Changed
+
+- **`bench/README.md`**: headline-numbers section is now a table (`Tier | Baseline | With feature | Headline`) instead of a bullet list — easier to scan.
+
 ## [1.3.10] - 2026-04-15
 
 ### Added

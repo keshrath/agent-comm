@@ -47,19 +47,15 @@ no live API spend). Individual Bx scenarios are invoked explicitly.
 
 ## Headline numbers
 
-- **Tier A** — all four gates pass with 2-3 orders of magnitude headroom:
-  CAS p50 ~0.05 ms (target 8 ms), hook cache fast-path p50 ~0.19 ms (target 1 ms),
-  fail-open detection mean ~1.3 ms (target 500 ms), SQLite writes ~17k ops/sec
-  (target 1k ops/sec).
-- **B1** — naive ships `MIXED` every trial; hooked ships `PURE` every trial.
-  Headline: **~0.65 hours saved per month** at 3 blocks / week.
-- **B2** — naive mean 4 duplicate tasks over n=3; pipeline-claim 0 duplicates on
-  every replicate. Safety invariant met.
-- **B3** — naive 2/3 successes (1 race loss); resource-lock 3/3 successes.
-- **B4** — without discover 1/3 correct (random baseline); with discover 3/3.
-- **B5** — no-state 2/4 unique reports, 2 duplicates; with-state 4/4, 0 duplicates.
-- **B6** — no-channels 3/3 pivoted (file-stat baseline); with-channels 3/3
-  pivoted via `comm_poll` + `importance=urgent` filter. Parity achieved.
+| Tier   | Baseline                             | With feature                                                                      | Headline                                               |
+| ------ | ------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **A**  | —                                    | CAS p50 ~0.05 ms, hook cache p50 ~0.19 ms, fail-open ~1.3 ms, SQLite ~17k ops/sec | All 4 gates pass with 2–3 orders of magnitude headroom |
+| **B1** | naive: `MIXED` commit every trial    | hooked: `PURE` commit every trial                                                 | **~0.65 hours saved / month** at 3 blocks/week         |
+| **B2** | naive: mean 4 duplicate tasks (n=3)  | pipeline-claim: 0 duplicates on every replicate                                   | Safety invariant met                                   |
+| **B3** | naive: 2/3 successes (1 race loss)   | resource-lock: 3/3 successes                                                      | Race eliminated                                        |
+| **B4** | without-discover: 1/3 correct        | with-discover: 3/3 correct                                                        | Deterministic vs random baseline                       |
+| **B5** | no-state: 2/4 unique, 2 duplicates   | with-state: 4/4 unique, 0 duplicates                                              | Cross-process persistence pays rent                    |
+| **B6** | no-channels: 3/3 pivoted (file-stat) | with-channels: 3/3 pivoted via `comm_poll` + `importance=urgent`                  | Parity achieved                                        |
 
 ## Tier C — production instrumentation
 
