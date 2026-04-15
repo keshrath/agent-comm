@@ -471,4 +471,32 @@ describe('REST API error cases', () => {
       expect(result.status).toBe(422);
     });
   });
+
+  describe('POST /api/feed (hook block emission)', () => {
+    it('accepts a hook-block event from an unknown agent id and returns 201', async () => {
+      const result = await post('/api/feed', {
+        agent: 't3a-rest-test-agent',
+        type: 'hook-block',
+        target: '/tmp/shared.ts',
+        preview: JSON.stringify({
+          tool: 'Edit',
+          target: '/tmp/shared.ts',
+          holder_agent: 'other',
+          reason: 'held-by-other',
+        }),
+      });
+      expect(result.status).toBe(201);
+      expect(result.body.type).toBe('hook-block');
+      expect(result.body.target).toBe('/tmp/shared.ts');
+      const feed = await get('/api/feed?type=hook-block&limit=5');
+      expect(feed.status).toBe(200);
+      const list = feed.body as unknown as Array<{ type: string; target: string | null }>;
+      expect(list.some((e) => e.type === 'hook-block' && e.target === '/tmp/shared.ts')).toBe(true);
+    });
+
+    it('returns 400 when type is missing', async () => {
+      const result = await post('/api/feed', { target: '/tmp/x' });
+      expect(result.status).toBe(400);
+    });
+  });
 });

@@ -199,6 +199,39 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
     json(res, ctx.feed.query({ agent: agentId, type, since, limit, offset }));
   });
 
+  // External feed submission. Used by the hook scripts (file-coord, bash-guard)
+  // to record a block event when they actively prevent a conflict. Best-effort
+  // from the caller's side — a 400/404 here does not propagate back because
+  // the hook treats feed emission as fail-soft. Accepts { agent, type, target,
+  // preview }. Agent may be an ID or name.
+  route('POST', '/api/feed', async (req, res) => {
+    const body = await readBody(req);
+    const agent = body.agent as string | undefined;
+    const type = body.type as string | undefined;
+    const target = (body.target ?? null) as string | null;
+    const preview = (body.preview ?? null) as string | null;
+    if (!type || typeof type !== 'string') {
+      return json(res, { error: '"type" is required' }, 400);
+    }
+    let agentId: string | null = null;
+    if (agent && typeof agent === 'string') {
+      const resolved = ctx.agents.resolveByNameOrId(agent);
+      agentId = resolved?.id ?? agent; // accept unknown IDs (hook AGENT_ID may not be registered)
+    }
+    try {
+      // feed.log's signature types agentId as string but the column is
+      // nullable — pass through unregistered hook AGENT_IDs as-is so block
+      // events still surface when the hook's identity isn't a registered agent.
+      const event = ctx.feed.log(agentId as unknown as string, type, target, preview);
+      json(res, event, 201);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return json(res, { error: err.message }, 400);
+      }
+      throw err;
+    }
+  });
+
   route('GET', '/api/branches', (req, res) => {
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const messageId = url.searchParams.get('message_id');

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.10] - 2026-04-15
+
+### Added
+
+- **`comm_poll`** MCP tool — blocking inbox wait with optional `importance` filter. Resolves as soon as a matching new message arrives (or after `timeout_ms`, max 60000ms). Replaces busy-poll patterns in coordinating agents.
+- **`importance` filter on `comm_inbox`** — returns only messages at a given level (`low`/`normal`/`high`/`urgent`), so agents can cheaply check for urgent signals without scanning the full inbox.
+
+### Changed
+
+- **Hook set trimmed.** `npm run setup` no longer installs `check-inbox.js` by default. Advisory PostToolUse nudges ("you have unread messages") don't reliably redirect the model during focused work. Peer-sent urgent signals are now handled by the `comm_poll` pattern in the agent's prompt contract. `check-inbox.js` remains in `scripts/hooks/` for users who opt in; when it does fire, it now only surfaces directly-addressed messages or high/urgent broadcasts in joined channels.
+- **`workspace-awareness.mjs` trimmed to facts-only.** SessionStart banner now lists other active sessions and recent peer edits as data; it no longer injects prescriptive advice ("Before editing files, check the dashboard..."). Active enforcement (`bash-guard`, `file-coord`) handles the safety contract.
+- **Bench suite re-organized.** Scenarios relabeled B1–B6 reflecting the validated primitives: catastrophe / pipeline claim / exclusive resource / skill discovery / cross-session / urgent pivot. See `bench/README.md`.
+- **Docs scrubbed to current-state only.** Historical narration removed from README, CLAUDE.md, CONTRIBUTING.md, docs/\*.md, and per-scenario READMEs.
+
+### Removed
+
+- **`comm_search` MCP tool.** Agents don't reach for cross-session message search when solving source-visible problems, so the MCP surface was dead weight. The FTS5 backend (`MessageService.search()` + `GET /api/messages/search`) remains available for the dashboard's human-facing search bar.
+- **`message_reactions` table.** Migration v6 drops the residual table; the `comm_react` tool was removed in v1.2.2 and the table has been unused since.
+
 ## [1.3.6] - 2026-04-11
 
 ### Fixed

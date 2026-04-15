@@ -18,7 +18,22 @@ export default tseslint.config(
     },
   },
   {
-    files: ['bench/runner.ts'],
+    files: ['bench/runner.ts', 'bench/scenarios/**/driver.ts', 'bench/scenarios/_shared/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  {
+    files: ['bench/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        Buffer: 'readonly',
+      },
+    },
     rules: { 'no-console': 'off' },
   },
   {
@@ -29,6 +44,7 @@ export default tseslint.config(
       'scripts/',
       '*.config.*',
       'bench/workloads/',
+      'bench/scenarios/**/workload/',
     ],
   },
 );

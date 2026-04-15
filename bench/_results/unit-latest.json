@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-15T17:25:57.313Z",
+  "node": "v24.13.0",
+  "platform": "win32",
+  "arch": "x64",
+  "benches": [
+    {
+      "name": "cas-latency",
+      "description": "StateService.compareAndSwap in-process, in-memory SQLite",
+      "n_ops": 10000,
+      "warmup_ops": 500,
+      "duration_ms": 1097.5832000000112,
+      "p50_ms": 0.08020000000010441,
+      "p95_ms": 0.18079999999986285,
+      "p99_ms": 0.31790000000000873,
+      "mean_ms": 0.10975832000000112,
+      "min_ms": 0.07200000000000273,
+      "max_ms": 17.224699999999984,
+      "targets": [
+        {
+          "metric": "p50",
+          "target": 8,
+          "actual": 0.08020000000010441,
+          "unit": "ms",
+          "direction": "lower",
+          "pass": true,
+          "slack": 1.2
+        },
+        {
+          "metric": "p95",
+          "target": 30,
+          "actual": 0.18079999999986285,
+          "unit": "ms",
+          "direction": "lower",
+          "pass": true,
+          "slack": 1.2
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "hook-cache-fast-path",
+      "description": "readFileSync + JSON.parse + mutate + JSON.stringify + writeFileSync (cache hit)",
+      "n_ops": 1000,
+      "warmup_ops": 200,
+      "duration_ms": 462.49800000001073,
+      "p50_ms": 0.409099999999853,
+      "p95_ms": 0.7563000000000102,
+      "p99_ms": 0.8753999999998996,
+      "mean_ms": 0.46249800000001073,
+      "min_ms": 0.2658999999998741,
+      "max_ms": 1.1908000000003085,
+      "targets": [
+        {
+          "metric": "p50",
+          "target": 1,
+          "actual": 0.409099999999853,
+          "unit": "ms",
+          "direction": "lower",
+          "pass": true,
+          "slack": 1.2
+        },
+        {
+          "metric": "p95",
+          "target": 3,
+          "actual": 0.7563000000000102,
+          "unit": "ms",
+          "direction": "lower",
+          "pass": true,
+          "slack": 1.2
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "fail-open-detection",
+      "description": "time for hook call() helper to resolve null after dashboard dies",
+      "n_ops": 5,
+      "warmup_ops": 0,
+      "duration_ms": 14.806399999999485,
+      "p50_ms": 2.2368999999998778,
+      "p95_ms": 5.33159999999998,
+      "p99_ms": 5.33159999999998,
+      "mean_ms": 2.961279999999897,
+      "min_ms": 1.912499999999909,
+      "max_ms": 5.33159999999998,
+      "targets": [
+        {
+          "metric": "mean detection time",
+          "target": 500,
+          "actual": 2.961279999999897,
+          "unit": "ms",
+          "direction": "lower",
+          "pass": true,
+          "slack": 1.2
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "sqlite-write-throughput",
+      "description": "MessageService.send → INSERT into messages table (in-memory SQLite)",
+      "n_ops": 5000,
+      "warmup_ops": 200,
+      "duration_ms": 540.797,
+      "mean_ms": 0.1081594,
+      "ops_per_sec": 9245.61341871349,
+      "targets": [
+        {
+          "metric": "throughput",
+          "target": 1000,
+          "actual": 9245.61341871349,
+          "unit": "ops/sec",
+          "direction": "higher",
+          "pass": true,
+          "slack": 1.2
+        }
+      ],
+      "pass": true
+    }
+  ]
+}

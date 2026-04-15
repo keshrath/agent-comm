@@ -1,14 +1,21 @@
 // =============================================================================
-// Bench runner — pilot dispatch + results persistence.
+// Bench runner — multi-term-commit regression pilot.
+//
+// This file runs the `multi-term-commit` regression (bash-guard cross-session
+// stability). The broader evaluation suite lives under `bench/scenarios/`:
+//
+//   - Tier A   unit bench         (bench/unit/,  `npm run bench:unit`)
+//   - Tier B1  catastrophe        (bench/scenarios/b1-catastrophe  — bash-guard)
+//   - Tier B2  pipeline claim     (bench/scenarios/b2-pipeline-claim — CAS)
+//   - Tier B3  exclusive lock     (bench/scenarios/b3-exclusive-resource — TTL locks)
+//   - Tier B4  skill discovery    (bench/scenarios/b4-skill-discovery)
+//   - Tier B5  cross-session      (bench/scenarios/b5-cross-session — persistence)
+//   - Tier B6  urgent pivot       (bench/scenarios/b6-urgent-pivot — messaging)
 //
 // `npm run bench:run` runs the mock driver (no API spend, harness sanity check).
-// `npm run bench:run -- --real` runs the live Claude CLI driver against all
-// pilots in sequence. `--pilot=<name>` runs just one pilot.
-//
-// Each pilot has two conditions (naive vs hooked, or naive vs pipeline-claim)
-// and writes its result to bench/_results/latest.json after running. The
-// dashboard reads that file via GET /api/bench (the UI panel was removed
-// in v1.3.2 but the endpoint stays for programmatic consumers).
+// `npm run bench:run -- --real` runs the live Claude CLI driver against the
+// multi-term-commit regression pilot. Each run writes results to
+// `bench/_results/latest.json` (read by the dashboard's `GET /api/bench`).
 // =============================================================================
 
 import * as path from 'node:path';
@@ -89,6 +96,10 @@ export interface RunWorkloadOptions {
   conditions?: MultiAgentRun['condition'][];
   /** Number of times to run each task per condition (for variance). Default 1. */
   n_runs?: number;
+  /** Total units the workload expects a fully-successful team to deliver.
+   * When set, the report's coverage_fraction = mean_unique_units / expected_units.
+   * Pass `null` (or omit) for pilots where coverage doesn't apply. */
+  expected_units?: number | null;
 }
 
 export async function runWorkload(opts: RunWorkloadOptions): Promise<BenchReport[]> {
@@ -104,7 +115,7 @@ export async function runWorkload(opts: RunWorkloadOptions): Promise<BenchReport
         runs.push(run);
       }
     }
-    reports.push(aggregate(runs));
+    reports.push(aggregate(runs, { expected_units: opts.expected_units ?? null }));
   }
 
   return reports;
@@ -144,9 +155,19 @@ export const mockDriver: AgentDriver = {
 
 function formatReport(r: BenchReport): string {
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+  // Coverage line: only printed when the pilot declares expected_units. For
+  // pilots where coverage isn't meaningful (multi-term-commit etc.) expected
+  // is null and we omit the line entirely rather than print a fake 0%.
+  const coverageLine =
+    r.expected_units !== null && r.coverage_fraction !== null
+      ? [
+          `    coverage               ${r.mean_unique_units.toFixed(1)}/${r.expected_units} = ${pct(r.coverage_fraction)}`,
+        ]
+      : [];
   return [
     `  ${r.condition.padEnd(16)} n=${r.n_runs}`,
     `    unique_units           ${r.mean_unique_units.toFixed(1)}`,
+    ...coverageLine,
     `    wall_seconds           ${r.mean_wall_seconds.toFixed(1)}s`,
     `    total_cost_usd         $${r.mean_total_cost_usd.toFixed(3)}`,
     `    units_per_dollar       ${r.units_per_dollar.toFixed(2)}`,
@@ -157,435 +178,8 @@ function formatReport(r: BenchReport): string {
 }
 
 // ---------------------------------------------------------------------------
-// Pilot 1: shared-routes — N agents adding routes to one shared file
-// ---------------------------------------------------------------------------
-
-async function runSharedRoutes(): Promise<void> {
-  const fixtureDir = path.resolve('bench/workloads/shared-routes');
-  const RESOURCES = ['users', 'posts', 'comments'];
-  const promptForAgent = (i: number): string => {
-    const resource = RESOURCES[i % RESOURCES.length];
-    return (
-      `You are agent #${i} (of 3) editing the SHARED file routes.js in this directory. ` +
-      `Other agents are editing the same file in parallel right now. ` +
-      `Your assigned resource is "${resource}". ` +
-      `Add EXACTLY two route handlers below the AGENTS_ADD_ROUTES_HERE marker:\n` +
-      `  addRoute("GET", "/api/${resource}", () => "ok");\n` +
-      `  addRoute("POST", "/api/${resource}", () => "ok");\n` +
-      `IMPORTANT: do not remove other agents' routes. The test \`node test.js\` passes ` +
-      `only when ALL 6 routes (GET+POST for users, posts, comments) are present.`
-    );
-  };
-  const task: WorkloadTask = {
-    task_id: 'shared-routes-pilot',
-    workload: 'shared-routes',
-    target: fixtureDir,
-    prompt: 'unused — see promptForAgent',
-  };
-  const naive = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.5,
-    expectedFiles: ['routes.js'],
-    sharedDir: true,
-    promptForAgent,
-  });
-  const hooked = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.5,
-    expectedFiles: ['routes.js'],
-    sharedDir: true,
-    installHook: true,
-    promptForAgent,
-  });
-
-  console.log('=== shared-routes (3 agents adding routes to one file) ===');
-  const naiveR = (
-    await runWorkload({
-      workload: 'shared-routes',
-      tasks: [task],
-      n_agents: 3,
-      driver: naive,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- naive (no hook) ---');
-  console.log(formatReport(naiveR));
-  const hookedR = (
-    await runWorkload({
-      workload: 'shared-routes',
-      tasks: [task],
-      n_agents: 3,
-      driver: hooked,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- hooked (file-coord PreToolUse hook installed) ---');
-  console.log(formatReport(hookedR));
-  console.log();
-  recordPilot({
-    name: 'shared-routes',
-    description: '3 agents adding GET+POST routes to one shared routes.js file',
-    timestamp: new Date().toISOString(),
-    conditions: [
-      { label: 'naive', report: naiveR },
-      { label: 'hooked', report: hookedR },
-    ],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Pilot 2: lost-update — N agents appending to a shared JSON list
-// ---------------------------------------------------------------------------
-
-async function runLostUpdate(): Promise<void> {
-  const fixtureDir = path.resolve('bench/workloads/lost-update');
-  const NAMES = ['alpha', 'beta', 'gamma'];
-  const promptForAgent = (i: number): string => {
-    const name = NAMES[i % NAMES.length];
-    return (
-      `You are agent #${i} (of 3) sharing the file state.json in this directory ` +
-      `with two other parallel agents. The file contains {"items": []}. ` +
-      `Your task: read state.json, append the string "${name}" to the items array, ` +
-      `and write the result back. The end goal is for the final state.json to contain ` +
-      `all 3 names ("alpha", "beta", "gamma"). Do not remove other agents' entries — ` +
-      `if you see any items already there, preserve them and append yours after. ` +
-      `Verify with \`node test.js\` (passes when items.length === 3).`
-    );
-  };
-  const task: WorkloadTask = {
-    task_id: 'lost-update-pilot',
-    workload: 'lost-update',
-    target: fixtureDir,
-    prompt: 'unused — see promptForAgent',
-  };
-  const naive = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.4,
-    expectedFiles: ['state.json'],
-    sharedDir: true,
-    promptForAgent,
-  });
-  const hooked = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.4,
-    expectedFiles: ['state.json'],
-    sharedDir: true,
-    installHook: true,
-    promptForAgent,
-  });
-
-  console.log('=== lost-update (3 agents appending to shared state.json) ===');
-  const naiveR = (
-    await runWorkload({
-      workload: 'lost-update',
-      tasks: [task],
-      n_agents: 3,
-      driver: naive,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- naive (no hook) ---');
-  console.log(formatReport(naiveR));
-  const hookedR = (
-    await runWorkload({
-      workload: 'lost-update',
-      tasks: [task],
-      n_agents: 3,
-      driver: hooked,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- hooked (file-coord PreToolUse hook installed) ---');
-  console.log(formatReport(hookedR));
-  console.log();
-  recordPilot({
-    name: 'lost-update',
-    description: '3 agents appending to one shared state.json (classic lost-update race)',
-    timestamp: new Date().toISOString(),
-    conditions: [
-      { label: 'naive', report: naiveR },
-      { label: 'hooked', report: hookedR },
-    ],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Pilot 3: real-codebase — small TypeScript-style app with interlocking files
-// ---------------------------------------------------------------------------
-
-async function runRealCodebase(): Promise<void> {
-  const fixtureDir = path.resolve('bench/workloads/real-codebase');
-  const TASKS = [
-    `Add an "is_active" boolean field to the User type in src/types.js. Update ` +
-      `src/user.js createUser to default is_active to true. Update src/db.js findUser to ` +
-      `only return users where is_active is true.`,
-    `Add input validation to src/user.js createUser: throw new Error("missing name") ` +
-      `if name is empty, throw new Error("invalid email") if email does not contain "@".`,
-    `Add error logging to src/db.js: in saveUser and findUser, wrap the body in try/catch ` +
-      `and console.error("[db]", err.message) before re-throwing.`,
-  ];
-  const promptForAgent = (i: number): string =>
-    `You are agent #${i} (of 3) working on this small Node.js project. Other agents ` +
-    `are editing the same files in parallel right now. Your assigned task:\n\n` +
-    `  ${TASKS[i % TASKS.length]}\n\n` +
-    `Read the files first to understand the structure. Make MINIMAL changes — only ` +
-    `what's needed for your task. Other agents are touching some of the same files; ` +
-    `do not remove their changes. Run \`node test.js\` to verify the project still ` +
-    `works AND your task is complete.`;
-  const task: WorkloadTask = {
-    task_id: 'real-codebase-pilot',
-    workload: 'real-codebase',
-    target: fixtureDir,
-    prompt: 'unused — see promptForAgent',
-  };
-  const naive = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.7,
-    expectedFiles: ['src/types.js', 'src/db.js', 'src/user.js'],
-    sharedDir: true,
-    promptForAgent,
-  });
-  const hooked = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.7,
-    expectedFiles: ['src/types.js', 'src/db.js', 'src/user.js'],
-    sharedDir: true,
-    installHook: true,
-    promptForAgent,
-  });
-
-  console.log('=== real-codebase (3 agents on a small TS-style project) ===');
-  const naiveR = (
-    await runWorkload({
-      workload: 'real-codebase',
-      tasks: [task],
-      n_agents: 3,
-      driver: naive,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- naive (no hook) ---');
-  console.log(formatReport(naiveR));
-  const hookedR = (
-    await runWorkload({
-      workload: 'real-codebase',
-      tasks: [task],
-      n_agents: 3,
-      driver: hooked,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- hooked (file-coord PreToolUse hook installed) ---');
-  console.log(formatReport(hookedR));
-  console.log();
-  recordPilot({
-    name: 'real-codebase',
-    description:
-      '3 agents adding interdependent features (type field, validation, logging) to a small Node.js project',
-    timestamp: new Date().toISOString(),
-    conditions: [
-      { label: 'naive', report: naiveR },
-      { label: 'hooked', report: hookedR },
-    ],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Pilot 4: async/cross-session handoff — sequential agents share comm_state
-// ---------------------------------------------------------------------------
-
-async function runAsyncHandoff(): Promise<void> {
-  // Two agents spawned SEQUENTIALLY, sharing a comm_state work queue. Agent A
-  // gets a tight budget that lets it finish ~half the work, then exits. Agent B
-  // (new process, fresh context) inspects the same comm_state queue and finishes
-  // the remaining tasks. Tests that comm_state persistence works across agent
-  // process lifetimes — the strongest theoretical use case for agent-comm.
-  const fixtureDir = path.resolve('bench/workloads/algos-6');
-  const expectedFiles = [
-    'csv-parse.js',
-    'format-number.js',
-    'word-wrap.js',
-    'roman.js',
-    'lcs.js',
-    'email-validate.js',
-  ];
-  const task: WorkloadTask = {
-    task_id: 'async-handoff-pilot',
-    workload: 'async-handoff',
-    target: fixtureDir,
-    prompt:
-      'There are 6 TODO functions in this directory. The work queue is in agent-comm ' +
-      'state (namespace pre-seeded by the bench driver). Use mcp__agent-comm__comm_state ' +
-      "with action='cas' to claim ONE pending task at a time, implement it, mark it done, " +
-      'then loop. Implement as many as you can within your budget. Other agents may have ' +
-      'already completed some tasks (their state will be "done" — skip those).',
-  };
-  // Sequential mode = n_runs is the number of agents to run one after another.
-  // Each "run" is a single agent. The pipeline-claim condition pre-seeds the
-  // queue and uses the same comm_state DB across both runs.
-  const driver = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.45,
-    expectedFiles,
-    sequentialAgents: true,
-  });
-
-  console.log('=== async-handoff (2 agents in sequence, sharing comm_state queue) ===');
-  const report = (
-    await runWorkload({
-      workload: 'async-handoff',
-      tasks: [task],
-      n_agents: 2,
-      driver,
-      conditions: ['pipeline-claim'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- pipeline-claim (sequential) ---');
-  console.log(formatReport(report));
-  console.log();
-  recordPilot({
-    name: 'async-handoff',
-    description:
-      '2 agents in sequence (not parallel) sharing a comm_state work queue — tests cross-session state continuity',
-    timestamp: new Date().toISOString(),
-    conditions: [{ label: 'pipeline-claim', report }],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Pilot 5: workspace-decision — multi agents, multi files, NO assignment
-// ---------------------------------------------------------------------------
-//
-// The test that asks: "can agents in a shared workspace decide who does what
-// without explicit pre-assignment?" Naive agents will all grab the same files
-// (decision collision). With the file-coord hook, the second agent that tries
-// to edit a claimed file gets BLOCKED with the holder's identity, which gives
-// it the signal to pick a different file. This tests whether the hook ALONE
-// enables decision coordination, without any explicit comm_send messaging.
-
-async function runWorkspaceDecision(): Promise<void> {
-  const fixtureDir = path.resolve('bench/workloads/algos-6');
-  const expectedFiles = [
-    'csv-parse.js',
-    'format-number.js',
-    'word-wrap.js',
-    'roman.js',
-    'lcs.js',
-    'email-validate.js',
-  ];
-  const promptForAgent = (i: number): string =>
-    `You are agent #${i} (of 3) sharing this directory with two other parallel ` +
-    `agents. There are 6 TODO functions, each in its own file: ${expectedFiles.join(', ')}. ` +
-    `Your goal: implement as many UNIQUE functions as the team can. Pick any 2 ` +
-    `functions, implement them, and verify with \`node test.js\`. CRITICAL: do NOT ` +
-    `duplicate work other agents are doing — if your Edit fails or you see another ` +
-    `agent has already worked on a file, pick a different one. The team is graded ` +
-    `on UNIQUE functions completed, not on individual output.`;
-  const task: WorkloadTask = {
-    task_id: 'workspace-decision-pilot',
-    workload: 'workspace-decision',
-    target: fixtureDir,
-    prompt: 'unused — see promptForAgent',
-  };
-  const naive = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.5,
-    expectedFiles,
-    sharedDir: true,
-    promptForAgent,
-  });
-  const hooked = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.5,
-    expectedFiles,
-    sharedDir: true,
-    installHook: true,
-    promptForAgent,
-  });
-  // pipeline-claim driver: pre-seeds comm_state with the 6 files as queue
-  // entries. The driver also injects pipelineClaimInstruction() into each
-  // agent's prompt (no need for per-agent task assignment — the queue IS
-  // the assignment). This is the right pattern for the workspace-decision
-  // use case: file-coord can't see decision collision, but cas-claim makes
-  // task assignment race-free at the data layer.
-  const pipelineClaim = makeCliDriver({
-    fixtureDir,
-    testCmd: 'node test.js',
-    maxBudgetUsd: 0.5,
-    expectedFiles,
-    sharedDir: true,
-    promptForAgent,
-  });
-
-  console.log('=== workspace-decision (3 agents, 6 files, NO pre-assignment) ===');
-  const naiveR = (
-    await runWorkload({
-      workload: 'workspace-decision',
-      tasks: [task],
-      n_agents: 3,
-      driver: naive,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- naive (no hook, no MCP) ---');
-  console.log(formatReport(naiveR));
-  const hookedR = (
-    await runWorkload({
-      workload: 'workspace-decision',
-      tasks: [task],
-      n_agents: 3,
-      driver: hooked,
-      conditions: ['control'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- hooked (file-coord hook only) ---');
-  console.log(formatReport(hookedR));
-  const pipelineR = (
-    await runWorkload({
-      workload: 'workspace-decision',
-      tasks: [task],
-      n_agents: 3,
-      driver: pipelineClaim,
-      conditions: ['pipeline-claim'],
-      n_runs: 1,
-    })
-  )[0];
-  console.log('  --- pipeline-claim (driver pre-seeds comm_state queue) ---');
-  console.log(formatReport(pipelineR));
-  console.log();
-  recordPilot({
-    name: 'workspace-decision',
-    description:
-      '3 agents in a shared workspace with 6 files and NO pre-assignment — naive vs file-coord hook vs pipeline-claim',
-    timestamp: new Date().toISOString(),
-    conditions: [
-      { label: 'naive', report: naiveR },
-      { label: 'hooked', report: hookedR },
-      { label: 'pipeline-claim', report: pipelineR },
-    ],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Pilot 6: multi-term-commit — temporal coordination across terminal sessions
+// Regression pilot: multi-term-commit — temporal coordination across terminal
+// sessions.
 // ---------------------------------------------------------------------------
 //
 // The user's actual real-world pain: Session A in terminal 1 edits two files,
@@ -763,15 +357,22 @@ async function analyzeMultiTermCommit(condition: string): Promise<PurityResult> 
       .trim()
       .split('\n')
       .filter(Boolean);
-    // Pure if it contains EXACTLY baz.js and qux.js, nothing else.
-    const expected = new Set(['baz.js', 'qux.js']);
+    // Pure if it contains baz.js and qux.js and NO files from A (foo.js,
+    // bar.js). The SUBGOAL_INSTRUCTION driver prompt makes agents write a
+    // subgoals.json planning artifact; its presence in B's commit is a
+    // harness-side artifact, not a coordination failure, so we ignore it
+    // when judging purity.
+    const A_FILES = new Set(['foo.js', 'bar.js']);
+    const B_FILES = new Set(['baz.js', 'qux.js']);
     const got = new Set(files);
-    const isPure = got.size === expected.size && [...expected].every((f) => got.has(f));
+    const hasAllB = [...B_FILES].every((f) => got.has(f));
+    const leakedFromA = [...A_FILES].filter((f) => got.has(f));
+    const isPure = hasAllB && leakedFromA.length === 0;
     return {
       commitFiles: files,
       purityScore: isPure ? 1 : 0,
       purityLabel: isPure
-        ? "PURE (B's commit contains only baz.js + qux.js)"
+        ? `PURE (B's commit contains only B's files${got.has('subgoals.json') ? ' + subgoals.json' : ''})`
         : `MIXED (B's commit contains: ${files.join(', ')})`,
     };
   } catch (err) {
@@ -801,21 +402,19 @@ async function main(): Promise<void> {
     });
     console.log('agent-comm bench (mock driver) — workload: mock, N=4\n');
     for (const r of reports) console.log(formatReport(r), '\n');
-    console.log('Pass --real to run live Claude Code subagents.');
+    console.log('Pass --real to run the multi-term-commit regression pilot.');
     return;
   }
 
-  // ----- v1.3.1 pilot suite: each scenario runs its own naive vs hooked -----
-  // Selectable via --pilot=name. Default runs all four in sequence.
+  // Only the multi-term-commit regression pilot remains here. The v2
+  // scenarios (B1/B2/B3/unit) live under bench/scenarios/ + bench/unit/
+  // and have their own drivers + npm scripts.
   const pilotArg = process.argv.find((a) => a.startsWith('--pilot='))?.split('=')[1];
   const runAll = !pilotArg || pilotArg === 'all';
 
-  if (runAll || pilotArg === 'shared-routes') await runSharedRoutes();
-  if (runAll || pilotArg === 'lost-update') await runLostUpdate();
-  if (runAll || pilotArg === 'real-codebase') await runRealCodebase();
-  if (runAll || pilotArg === 'async') await runAsyncHandoff();
-  if (runAll || pilotArg === 'workspace-decision') await runWorkspaceDecision();
-  if (runAll || pilotArg === 'multi-term') await runMultiTerminalCommit();
+  if (runAll || pilotArg === 'multi-term' || pilotArg === 'multi-term-commit') {
+    await runMultiTerminalCommit();
+  }
 }
 
 main().catch((e) => {

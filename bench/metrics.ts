@@ -205,12 +205,33 @@ export interface BenchReport {
   units_per_dollar: number;
   /** Mean wall-clock time of the whole run in seconds. */
   mean_wall_seconds: number;
+  /**
+   * Total units the workload expects a fully-successful team to complete.
+   * `null` for workloads where a unit count isn't meaningful (e.g. commit
+   * purity, lost-update preservation). When null, `coverage_fraction` is also
+   * null. Set by the pilot at dispatch time via `runWorkload({ expected_units })`.
+   */
+  expected_units: number | null;
+  /**
+   * Graded completion metric: `mean_unique_units / expected_units`, clamped to
+   * [0, 1]. Complements the binary `*_pass_rate` fields — a run that completes
+   * 4 of 6 named units scores coverage_fraction=0.67 while pass_rate stays 0.
+   * `null` iff `expected_units` is null.
+   */
+  coverage_fraction: number | null;
 }
 
-export function aggregate(runs: MultiAgentRun[]): BenchReport {
+export interface AggregateOptions {
+  /** Expected total unique units for a fully-successful run. Pass `null`
+   * (or omit) for workloads where coverage isn't a meaningful metric. */
+  expected_units?: number | null;
+}
+
+export function aggregate(runs: MultiAgentRun[], options: AggregateOptions = {}): BenchReport {
   if (runs.length === 0) {
     throw new Error('aggregate: empty run list');
   }
+  const expected = options.expected_units ?? null;
   const finite = (x: number) => (Number.isFinite(x) ? x : 0);
   let agentTotal = 0;
   let agentPass = 0;
@@ -244,6 +265,10 @@ export function aggregate(runs: MultiAgentRun[]): BenchReport {
   const meanUnique = totalUnique / runs.length;
   const meanCost = costRunsCounted === 0 ? 0 : totalCost / costRunsCounted;
   const unitsPerDollar = meanCost > 0 ? meanUnique / meanCost : 0;
+  // Coverage: units / expected, clamped to [0, 1]. Null when expected is null
+  // or non-positive so we don't fake a number for pilots where it's meaningless.
+  const coverageFraction =
+    expected === null || expected <= 0 ? null : Math.min(1, Math.max(0, meanUnique / expected));
   return {
     workload: runs[0].workload,
     condition: runs[0].condition,
@@ -258,5 +283,7 @@ export function aggregate(runs: MultiAgentRun[]): BenchReport {
     mean_total_cost_usd: meanCost,
     units_per_dollar: unitsPerDollar,
     mean_wall_seconds: runs.reduce((s, r) => s + r.total_wall_ms, 0) / runs.length / 1000,
+    expected_units: expected,
+    coverage_fraction: coverageFraction,
   };
 }

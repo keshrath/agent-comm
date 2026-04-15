@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "id": "task-1",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Describe how TTL-based locks auto-expire on crashes"
+    },
+    {
+      "id": "task-2",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Contrast leader election via heartbeat vs lease"
+    },
+    {
+      "id": "task-3",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Explain idempotency keys in distributed work queues"
+    },
+    {
+      "id": "task-4",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Summarize fencing tokens for split-brain prevention"
+    }
+  ]
+}

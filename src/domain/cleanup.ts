@@ -179,7 +179,6 @@ export class CleanupService extends KitCleanupService<CleanupStats> {
 
   /** Purge everything: all agents, messages, channels, state, feed. */
   purgeEverything(): CleanupStats {
-    this.db.run(`DELETE FROM message_reactions`);
     this.db.run(`DELETE FROM message_reads`);
     this.db.run(`DELETE FROM channel_members`);
     const feed_events = this.db.run(`DELETE FROM feed_events`).changes;

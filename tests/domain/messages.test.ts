@@ -227,4 +227,74 @@ describe('MessageService', () => {
       expect(message.content).toBe('evented');
     });
   });
+
+  describe('inbox importance filter', () => {
+    it('filters by importance level', () => {
+      ctx.messages.send(alice.id, { to: bob.id, content: 'low', importance: 'low' });
+      ctx.messages.send(alice.id, { to: bob.id, content: 'urgent!', importance: 'urgent' });
+      ctx.messages.send(alice.id, { to: bob.id, content: 'normal' });
+
+      const urgents = ctx.messages.inbox(bob.id, { importance: 'urgent' });
+      expect(urgents).toHaveLength(1);
+      expect(urgents[0].content).toBe('urgent!');
+
+      const normals = ctx.messages.inbox(bob.id, { importance: 'normal' });
+      expect(normals).toHaveLength(1);
+      expect(normals[0].content).toBe('normal');
+    });
+
+    it('rejects invalid importance', () => {
+      expect(() =>
+        ctx.messages.inbox(bob.id, {
+          importance: 'bogus' as 'urgent',
+        }),
+      ).toThrow('Invalid importance');
+    });
+  });
+
+  describe('pollInbox', () => {
+    it('resolves immediately when inbox already has a match', async () => {
+      ctx.messages.send(alice.id, { to: bob.id, content: 'ready' });
+      const started = Date.now();
+      const result = await ctx.messages.pollInbox(bob.id, 5000);
+      expect(Date.now() - started).toBeLessThan(50);
+      expect(result).toHaveLength(1);
+    });
+
+    it('blocks until a new matching message arrives', async () => {
+      const pending = ctx.messages.pollInbox(bob.id, 1000);
+      setTimeout(() => ctx.messages.send(alice.id, { to: bob.id, content: 'late' }), 30);
+      const result = await pending;
+      expect(result).toHaveLength(1);
+      expect(result[0].content).toBe('late');
+    });
+
+    it('returns empty array on timeout', async () => {
+      const started = Date.now();
+      const result = await ctx.messages.pollInbox(bob.id, 80);
+      const elapsed = Date.now() - started;
+      expect(result).toHaveLength(0);
+      expect(elapsed).toBeGreaterThanOrEqual(70);
+      expect(elapsed).toBeLessThan(200);
+    });
+
+    it('respects importance filter while waiting', async () => {
+      const pending = ctx.messages.pollInbox(bob.id, 500, { importance: 'urgent' });
+      // send a non-urgent first — should not resolve
+      setTimeout(() => ctx.messages.send(alice.id, { to: bob.id, content: 'normal msg' }), 20);
+      // then an urgent — should resolve
+      setTimeout(
+        () =>
+          ctx.messages.send(alice.id, {
+            to: bob.id,
+            content: 'urgent msg',
+            importance: 'urgent',
+          }),
+        60,
+      );
+      const result = await pending;
+      expect(result).toHaveLength(1);
+      expect(result[0].content).toBe('urgent msg');
+    });
+  });
 });

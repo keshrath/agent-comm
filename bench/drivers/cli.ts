@@ -54,6 +54,27 @@ export interface CliDriverOptions {
    * each agent's --settings JSON. Intercepts git commit / npm install / etc.
    * and blocks/warns based on the world model. */
   installBashGuard?: boolean;
+  /** Optional: fire a side-effect after the agents spawn but before the
+   * driver awaits their completion. Useful for simulating an external event
+   * (e.g. comm_send from the harness to an in-flight agent) at a predictable
+   * delay. Invoked once per run, in parallel with the agents, with access to
+   * the shared seedCtx (for direct domain-service calls) and the run_id.
+   * Errors are swallowed — log them yourself. Only fires when needDashboard
+   * was true (otherwise seedCtx is null and the callback is skipped). */
+  midFlightAction?: (info: { runId: string; seedCtx: AppContext }) => Promise<void> | void;
+  /** Optional: scenario-specific pre-seeding callback. Called once after the
+   * shared workspace dir is created, the dashboard (if any) is booted, and
+   * the seedCtx is available — but BEFORE any agent spawns. Use it to pre-
+   * populate comm_state namespaces (e.g. workspace-agents, files-edited)
+   * that the system-under-test will react to. Called in both sharedDir and
+   * per-agent-dir modes; in per-agent mode `workspaceDir` is the first
+   * agent's dir (good enough for scenarios that don't care about workspace
+   * identity). */
+  preSeedState?: (info: {
+    workspaceDir: string;
+    runId: string;
+    seedCtx: AppContext;
+  }) => Promise<void> | void;
   /** When true, the driver runs `git init && git add . && git commit -m initial`
    * in the shared dir before any agent spawns. Used by the multi-term pilot. */
   gitInit?: boolean;
@@ -69,13 +90,42 @@ export interface CliDriverOptions {
    * context) picks up the rest via comm_state. Only meaningful with
    * pipeline-claim condition. */
   sequentialAgents?: boolean;
+  /** Only meaningful when `sequentialAgents=true` AND `sharedDir=true`. When
+   * set, each sequential agent still gets its OWN working directory (a copy
+   * of the fixture) — but the driver keeps the dashboard + seedCtx alive
+   * across the sequence so comm_state DOES persist from agent A to agent B.
+   * The filesystem, however, does NOT carry over: A's report-*.md files are
+   * in A's dir and invisible to B. Used by B14 to force cross-session
+   * coordination through comm_state (and ONLY comm_state) — if the no-state
+   * condition still lets B avoid duplicates, it must be doing so via
+   * filesystem inspection, which we want to rule out. */
+  perAgentDirsInSequential?: boolean;
+  /** When true (default false), each agent writes a per-agent subgoals file
+   * (`subgoals-a<i>.json`) rather than the shared `subgoals.json`. In
+   * sharedDir runs, parallel agents stomp the single file (last-writer-wins);
+   * per-agent files let the harness aggregate plans across all agents. Opt
+   * in for scenarios that want real per-agent aggregation; leave off when
+   * downstream analysis expects the single filename
+   * (multi-term-commit's git-commit check). */
+  perAgentSubgoals?: boolean;
 }
 
-const SUBGOAL_INSTRUCTION = `
-Before doing any work, write a file called subgoals.json in the current
+function subgoalInstruction(filename: string): string {
+  return `
+Before doing any work, write a file called ${filename} in the current
 directory containing a JSON array of strings. Each string is one short sub-goal
 you plan to accomplish. Example: ["implement camelToKebab", "verify with tests"].
 Then implement whatever the task requires and run the tests.
+`.trim();
+}
+
+const SUBGOAL_INSTRUCTION = subgoalInstruction('subgoals.json');
+
+const NO_MCP_WARNING = `
+### No coordination tools available
+You do NOT have access to MCP tools (comm_state, comm_send, mcp__agent-comm__*).
+Any call to these will silently fail. Coordinate only via files and bash.
+Do not write code that invokes these tools; such code will not execute.
 `.trim();
 
 function pipelineClaimInstruction(queueNamespace: string, files: string[]): string {
@@ -132,12 +182,17 @@ async function fileHash(p: string): Promise<string> {
   }
 }
 
+// Subgoal artifacts (single `subgoals.json` or per-agent `subgoals-*.json`)
+// are harness-side planning outputs — not workload edits. Filter them out of
+// files_edited so they don't skew collision / purity metrics.
+const SUBGOAL_FILE_RE = /^subgoals(-[^/\\]+)?\.json$/;
+
 async function diffEdited(fixtureDir: string, agentDir: string): Promise<string[]> {
   const edited: string[] = [];
   const entries = await fs.readdir(agentDir, { withFileTypes: true });
   for (const e of entries) {
     if (e.isDirectory()) continue;
-    if (e.name === 'subgoals.json') continue;
+    if (SUBGOAL_FILE_RE.test(e.name)) continue;
     const fixtureContent = await fileHash(path.join(fixtureDir, e.name));
     const agentContent = await fileHash(path.join(agentDir, e.name));
     if (fixtureContent !== agentContent) edited.push(e.name);
@@ -145,15 +200,37 @@ async function diffEdited(fixtureDir: string, agentDir: string): Promise<string[
   return edited;
 }
 
-async function readSubgoals(agentDir: string): Promise<string[]> {
+async function readSubgoals(agentDir: string, filename = 'subgoals.json'): Promise<string[]> {
   try {
-    const raw = await fs.readFile(path.join(agentDir, 'subgoals.json'), 'utf8');
+    const raw = await fs.readFile(path.join(agentDir, filename), 'utf8');
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === 'string');
   } catch {
     /* no subgoals file written */
   }
   return [];
+}
+
+/** Read all per-agent `subgoals-*.json` files from a shared dir and return
+ * a map from agent-name (the `*` part) to the parsed string array. Used in
+ * sharedDir + perAgentSubgoals mode where the single `subgoals.json` file
+ * would otherwise be stomped by parallel writers. */
+async function readAllPerAgentSubgoals(dir: string): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    const m = /^subgoals-(.+)\.json$/.exec(e.name);
+    if (!m) continue;
+    const list = await readSubgoals(dir, e.name);
+    if (list.length > 0) out.set(m[1], list);
+  }
+  return out;
 }
 
 interface ClaudeJsonResult {
@@ -178,6 +255,10 @@ interface SpawnOptions {
   /** Output dir for per-agent settings/config files (so they don't pollute the
    * shared agent dir in sharedDir mode). */
   scratchDir: string;
+  /** Optional hook trace file path — passed to the subagent via
+   * AGENT_COMM_HOOK_TRACE_FILE. Each file-coord hook invocation appends one
+   * JSON line. Only set when installHook=true. */
+  hookTraceFile?: string;
 }
 
 function spawnClaude(
@@ -205,6 +286,13 @@ function spawnClaude(
       '--no-session-persistence',
       '--permission-mode',
       'bypassPermissions',
+      // Isolate the agent from the operator's user/project settings so the
+      // "naive" condition really has no hooks. Without this, Claude Code
+      // merges ~/.claude/settings.json on top of --settings, which in a dev
+      // box that already installed bash-guard globally would bleed the hook
+      // into the naive run and destroy the naive-vs-hooked contrast.
+      '--setting-sources',
+      '',
     ];
     if (withMcp) {
       // Point at the locally-built agent-comm so the agent has comm_* tools.
@@ -277,13 +365,14 @@ function spawnClaude(
         ...process.env,
         AGENT_COMM_ID: agentName,
         AGENT_COMM_PORT: String(hookPort ?? 3421),
+        ...(opts.hookTraceFile ? { AGENT_COMM_HOOK_TRACE_FILE: opts.hookTraceFile } : {}),
       },
     });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => (stdout += d.toString()));
     child.stderr.on('data', (d) => (stderr += d.toString()));
-    child.on('close', async () => {
+    child.on('close', async (code, signal) => {
       const wall_ms = Date.now() - start;
       let raw: ClaudeJsonResult | null = null;
       try {
@@ -292,18 +381,34 @@ function spawnClaude(
         /* not valid json — leave null */
       }
       // Persist stdout/stderr to the LOG dir (not agent dir, so they don't
-      // pollute the file-edit diff).
+      // pollute the file-edit diff). Include exit-code metadata so we can
+      // diagnose "0-wall instant-fail" cases where claude exits without
+      // producing any output.
       try {
         await fs.writeFile(path.join(logDir, `${agentName}_stdout.log`), stdout);
-        await fs.writeFile(path.join(logDir, `${agentName}_stderr.log`), stderr);
+        await fs.writeFile(
+          path.join(logDir, `${agentName}_stderr.log`),
+          `[driver] spawn exit: code=${String(code)} signal=${String(signal)} wall_ms=${wall_ms}\n${stderr}`,
+        );
       } catch {
         /* best effort */
       }
       const tokens = (raw?.usage?.input_tokens ?? 0) + (raw?.usage?.output_tokens ?? 0);
       resolve({ tokens, wall_ms, raw, stderr });
     });
-    child.on('error', () => {
-      resolve({ tokens: 0, wall_ms: Date.now() - start, raw: null, stderr });
+    child.on('error', (err) => {
+      const wall_ms = Date.now() - start;
+      // Log the spawn error to the agent's stderr file so we can see what
+      // happened. Without this, "wall=0 cost=$0" failures are invisible.
+      try {
+        writeFileSync(
+          path.join(logDir, `${agentName}_stderr.log`),
+          `[driver] spawn error: ${err.message}\n${stderr}`,
+        );
+      } catch {
+        /* best effort */
+      }
+      resolve({ tokens: 0, wall_ms, raw: null, stderr });
     });
   });
 }
@@ -315,14 +420,31 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       const runRoot = path.join(TMP_ROOT, `bench-${runId}`);
       await fs.mkdir(runRoot, { recursive: true });
 
+      // Hook trace: only produce a trace file when the hook is actually
+      // installed. Naive runs get no trace file at all, so the verification
+      // step (`ls bench/_results/hook-trace-*-naive-*`) returns nothing, which
+      // is the evidence that the hook isn't firing on that side.
+      const resultsDir = path.resolve('bench/_results');
+      await fs.mkdir(resultsDir, { recursive: true });
+      const anyHookInstalled = opts.installHook === true || opts.installBashGuard === true;
+      const pilotLabel = `${task.workload}-${anyHookInstalled ? 'hooked' : 'naive'}`;
+      const hookTraceFile = anyHookInstalled
+        ? path.join(resultsDir, `hook-trace-${pilotLabel}-${Date.now()}.log`)
+        : undefined;
+
       const withMcp =
         condition === 'pipeline-claim' ||
         opts.installHook === true ||
         opts.installBashGuard === true;
-      // Hook needs the dashboard REST server running.
+      // Hook needs the dashboard REST server running. midFlightAction needs
+      // a seedCtx so it can call domain services; in practice seedCtx is
+      // created whenever needDashboard OR midFlightAction OR pipeline-claim
+      // is set.
       const needDashboard =
         opts.installHook === true ||
         opts.installBashGuard === true ||
+        opts.midFlightAction !== undefined ||
+        opts.preSeedState !== undefined ||
         condition === 'pipeline-claim';
 
       // Pipeline-claim condition: pre-seed the work queue via direct lib
@@ -345,9 +467,24 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
         dashboard = await startDashboard(seedCtx, hookPort);
       }
 
+      // In sharedDir mode with perAgentSubgoals opted in, tell each agent to
+      // write its plan to `subgoals-a<i>.json` instead of the stomped shared
+      // `subgoals.json`. Per-agent dir mode is unaffected — each dir already
+      // isolates the file so the default single-name instruction is fine.
+      // Multi-term-commit intentionally keeps the shared filename (its git
+      // commit analyzer references `subgoals.json` directly) by leaving
+      // perAgentSubgoals unset.
+      const subgoalsPerAgent = opts.perAgentSubgoals === true && opts.sharedDir === true;
+
       function buildPrompt(agentIndex: number): string {
         const base = opts.promptForAgent ? opts.promptForAgent(agentIndex) : task.prompt;
-        const parts: string[] = [base, SUBGOAL_INSTRUCTION];
+        const instr = subgoalsPerAgent
+          ? subgoalInstruction(`subgoals-a${agentIndex}.json`)
+          : SUBGOAL_INSTRUCTION;
+        const parts: string[] = [base, instr];
+        if (!withMcp) {
+          parts.unshift(NO_MCP_WARNING);
+        }
         if (condition === 'pipeline-claim') {
           parts.push(pipelineClaimInstruction(queueNamespace, opts.expectedFiles));
         }
@@ -355,11 +492,21 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       }
 
       // Per-agent vs shared dir.
+      // When sequentialAgents + sharedDir + perAgentDirsInSequential are ALL
+      // set, treat the run as "per-agent dirs but shared comm_state DB": each
+      // agent gets its own fixture copy (so filesystem observation between
+      // agents is impossible), while the seedCtx + dashboard booted above
+      // persists across the sequence (so comm_state IS the only handoff
+      // channel). Used by B14 retry.
       const scratchDir = path.join(runRoot, '_scratch');
       await fs.mkdir(scratchDir, { recursive: true });
       const agentDirs: string[] = [];
       let sharedAgentDir = '';
-      if (opts.sharedDir) {
+      const perAgentDirsInSequential =
+        opts.sequentialAgents === true &&
+        opts.sharedDir === true &&
+        opts.perAgentDirsInSequential === true;
+      if (opts.sharedDir && !perAgentDirsInSequential) {
         // ONE working dir, all agents cd into it.
         sharedAgentDir = path.join(runRoot, 'shared');
         await copyDir(opts.fixtureDir, sharedAgentDir);
@@ -370,6 +517,20 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
           await copyDir(opts.fixtureDir, dir);
           agentDirs.push(dir);
         }
+      }
+
+      // Optional: scenario-specific pre-seeding of comm_state. Runs AFTER
+      // dirs are set up and the dashboard is booted, BEFORE any agent spawns.
+      // We lazy-create seedCtx if the scenario didn't already need one.
+      if (opts.preSeedState) {
+        if (!seedCtx) seedCtx = createContext();
+        if (!dashboard && needDashboard === false) {
+          // Pre-seeding without a running dashboard would mean the hook can't
+          // see the seed — but if needDashboard is false, the scenario
+          // doesn't care. Still, honor the callback.
+        }
+        const workspaceDir = opts.sharedDir ? sharedAgentDir : (agentDirs[0] ?? runRoot);
+        await opts.preSeedState({ workspaceDir, runId, seedCtx });
       }
 
       // Optional: init a git repo in the shared dir before agents spawn.
@@ -418,26 +579,44 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
             installBashGuard: opts.installBashGuard === true,
             hookPort,
             scratchDir,
+            hookTraceFile,
           });
           results.push(r);
         }
       } else {
-        results = await Promise.all(
-          agentDirs.map((dir, i) =>
-            spawnClaude({
-              agentDir: dir,
-              logDir,
-              agentName: `a${i}`,
-              prompt: buildPrompt(i),
-              budgetUsd: opts.maxBudgetUsd,
-              withMcp,
-              installHook: opts.installHook === true,
-              installBashGuard: opts.installBashGuard === true,
-              hookPort,
-              scratchDir,
-            }),
-          ),
+        const spawnPromises = agentDirs.map((dir, i) =>
+          spawnClaude({
+            agentDir: dir,
+            logDir,
+            agentName: `a${i}`,
+            prompt: buildPrompt(i),
+            budgetUsd: opts.maxBudgetUsd,
+            withMcp,
+            installHook: opts.installHook === true,
+            installBashGuard: opts.installBashGuard === true,
+            hookPort,
+            scratchDir,
+            hookTraceFile,
+          }),
         );
+        // Fire midFlightAction in parallel with the agents so scenarios can
+        // simulate external events (e.g. a comm_send to an in-flight agent).
+        // We don't block the main run on it — await after spawns complete so
+        // a hung side-effect can't stall the driver indefinitely.
+        let midFlightErr: unknown = null;
+        const midFlightPromise =
+          opts.midFlightAction && seedCtx
+            ? Promise.resolve(opts.midFlightAction({ runId, seedCtx })).catch((e) => {
+                midFlightErr = e;
+              })
+            : Promise.resolve();
+        results = await Promise.all(spawnPromises);
+        await midFlightPromise;
+        if (midFlightErr) {
+          process.stderr.write(
+            `[bench] midFlightAction failed: ${(midFlightErr as Error).message ?? String(midFlightErr)}\n`,
+          );
+        }
       }
       const total_wall_ms = Date.now() - totalStart;
 
@@ -447,14 +626,28 @@ export function makeCliDriver(opts: CliDriverOptions): AgentDriver {
       // (from the shared dir) and then attribute to ALL agents collectively;
       // file collision is no longer the right metric (everything is "shared").
       const agents: AgentRun[] = [];
-      if (opts.sharedDir) {
+      if (opts.sharedDir && !perAgentDirsInSequential) {
         const sharedTest = await runTest(sharedAgentDir, opts.testCmd);
+        // Aggregate plans from all per-agent subgoal files when opted in.
+        // When the driver didn't request per-agent files, the shared
+        // subgoals.json is stomped by parallel writers; the last survivor
+        // (if any) is attributed to agent 0 as a best effort so the field
+        // isn't uniformly empty.
+        const perAgentPlans = subgoalsPerAgent
+          ? await readAllPerAgentSubgoals(sharedAgentDir)
+          : new Map<string, string[]>();
+        const sharedPlan = subgoalsPerAgent ? [] : await readSubgoals(sharedAgentDir);
         for (let i = 0; i < n; i++) {
           const r = results[i];
+          const plan = subgoalsPerAgent
+            ? (perAgentPlans.get(`a${i}`) ?? [])
+            : i === 0
+              ? sharedPlan
+              : [];
           agents.push({
             agent: `a${i}`,
             files_edited: [], // not meaningful in shared mode
-            subgoals: [],
+            subgoals: plan,
             tokens: r.tokens,
             wall_ms: r.wall_ms,
             tests_passed: sharedTest.passed,

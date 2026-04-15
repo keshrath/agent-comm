@@ -234,6 +234,62 @@ describe('file-coord.mjs', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Block-event emission (T3.A — _fail-open.mjs signalBlock helper)
+//
+// The signal helper MUST emit an AGENT_COMM_HOOK_BLOCK: stderr line every
+// time a hook enforces a block, even when the dashboard is unreachable.
+// Verifying the stderr surface here is enough — REST emission to /api/feed
+// is exercised by the integration tests when the dashboard is alive.
+// ---------------------------------------------------------------------------
+
+describe('_fail-open.mjs signalBlock (T3.A)', () => {
+  it('writes AGENT_COMM_HOOK_BLOCK stderr line with hook name and payload', async () => {
+    const prevPort = process.env.AGENT_COMM_PORT;
+    const prevId = process.env.AGENT_COMM_ID;
+    process.env.AGENT_COMM_PORT = '1';
+    process.env.AGENT_COMM_ID = 't3a-unit-test';
+
+    const modUrl =
+      'file:///' + join(HOOKS_DIR, '_fail-open.mjs').replace(/\\/g, '/') + '?t=' + Date.now();
+    const mod = (await import(modUrl)) as {
+      signalBlock: (h: string, p: Record<string, unknown>) => Promise<void>;
+    };
+
+    const origWrite = process.stderr.write.bind(process.stderr);
+    let captured = '';
+    // @ts-expect-error patching for test capture
+    process.stderr.write = (chunk: string | Buffer) => {
+      captured += typeof chunk === 'string' ? chunk : chunk.toString();
+      return true;
+    };
+    try {
+      await mod.signalBlock('test-hook', {
+        tool: 'Edit',
+        target: '/tmp/x',
+        holder_agent: 'other',
+        reason: 'held-by-other',
+      });
+    } finally {
+      process.stderr.write = origWrite;
+      if (prevPort === undefined) delete process.env.AGENT_COMM_PORT;
+      else process.env.AGENT_COMM_PORT = prevPort;
+      if (prevId === undefined) delete process.env.AGENT_COMM_ID;
+      else process.env.AGENT_COMM_ID = prevId;
+    }
+    const match = captured.match(/^AGENT_COMM_HOOK_BLOCK: (\{.*\})$/m);
+    expect(match).toBeTruthy();
+    const payload = JSON.parse(match![1]);
+    expect(payload.hook).toBe('test-hook');
+    expect(payload.tool).toBe('Edit');
+    expect(payload.target).toBe('/tmp/x');
+    expect(payload.holder_agent).toBe('other');
+    expect(payload.reason).toBe('held-by-other');
+    expect(payload.blocked_agent).toBe('t3a-unit-test');
+    expect(typeof payload.ts).toBe('string');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // workspace-awareness.mjs (SessionStart)
 // ---------------------------------------------------------------------------
 

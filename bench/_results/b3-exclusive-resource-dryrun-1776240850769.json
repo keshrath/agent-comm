@@ -1,0 +1,133 @@
+{
+  "scenario": "b3-exclusive-resource",
+  "version": "1.3.9",
+  "generated_at": "2026-04-15T08:14:10.769Z",
+  "args": {
+    "dryRun": true,
+    "real": false,
+    "n": 1,
+    "agents": 3,
+    "maxCostUsd": 15,
+    "conditions": ["naive", "resource-lock"]
+  },
+  "aggregates": [
+    {
+      "condition": "naive",
+      "n": 1,
+      "per_run": [
+        {
+          "successes": 2,
+          "failures": 1,
+          "stomped": 0,
+          "pid_file_leaked": 0,
+          "total_invocations": 3,
+          "wall_seconds": 13.915512900799513,
+          "total_cost_usd": 0.2513868800131604
+        }
+      ],
+      "successes": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 1
+      },
+      "failures": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 1
+      },
+      "stomped": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 1
+      },
+      "pid_file_leaked": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 1
+      },
+      "wall_seconds": {
+        "mean": 13.915512900799513,
+        "stddev": 0,
+        "min": 13.915512900799513,
+        "max": 13.915512900799513,
+        "n": 1
+      },
+      "total_cost_usd": {
+        "mean": 0.2513868800131604,
+        "stddev": 0,
+        "min": 0.2513868800131604,
+        "max": 0.2513868800131604,
+        "n": 1
+      },
+      "passed": true,
+      "stopped_early": false
+    },
+    {
+      "condition": "resource-lock",
+      "n": 1,
+      "per_run": [
+        {
+          "successes": 3,
+          "failures": 0,
+          "stomped": 0,
+          "pid_file_leaked": 0,
+          "total_invocations": 3,
+          "wall_seconds": 30.439546244684607,
+          "total_cost_usd": 0.9376447160728276
+        }
+      ],
+      "successes": {
+        "mean": 3,
+        "stddev": 0,
+        "min": 3,
+        "max": 3,
+        "n": 1
+      },
+      "failures": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 1
+      },
+      "stomped": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 1
+      },
+      "pid_file_leaked": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 1
+      },
+      "wall_seconds": {
+        "mean": 30.439546244684607,
+        "stddev": 0,
+        "min": 30.439546244684607,
+        "max": 30.439546244684607,
+        "n": 1
+      },
+      "total_cost_usd": {
+        "mean": 0.9376447160728276,
+        "stddev": 0,
+        "min": 0.9376447160728276,
+        "max": 0.9376447160728276,
+        "n": 1
+      },
+      "passed": true,
+      "stopped_early": false
+    }
+  ]
+}

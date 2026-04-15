@@ -1,11 +1,11 @@
 {
   "version": "1.3.1",
-  "generated_at": "2026-04-08T21:37:49.959Z",
+  "generated_at": "2026-04-14T22:55:59.724Z",
   "pilots": [
     {
       "name": "async-handoff",
       "description": "2 agents in sequence (not parallel) sharing a comm_state work queue — tests cross-session state continuity",
-      "timestamp": "2026-04-08T19:39:17.758Z",
+      "timestamp": "2026-04-14T21:14:51.952Z",
       "conditions": [
         {
           "label": "pipeline-claim",
@@ -14,15 +14,17 @@
             "condition": "pipeline-claim",
             "n_runs": 1,
             "file_collision_rate": 0,
-            "duplicate_subgoal_rate": 0.2222222222222222,
+            "duplicate_subgoal_rate": 0.8571428571428571,
             "mean_token_overhead": 0,
-            "mean_parallelism": 0.999952797161536,
+            "mean_parallelism": 0.9999810072489,
             "individual_pass_rate": 0,
             "merged_pass_rate": 0,
-            "mean_unique_units": 5,
-            "mean_total_cost_usd": 0.94605325,
-            "units_per_dollar": 5.285114764945843,
-            "mean_wall_seconds": 127.111
+            "mean_unique_units": 6,
+            "mean_total_cost_usd": 0.92536975,
+            "units_per_dollar": 6.483894681018048,
+            "mean_wall_seconds": 315.91,
+            "expected_units": null,
+            "coverage_fraction": null
           }
         }
       ]
@@ -30,7 +32,7 @@
     {
       "name": "lost-update",
       "description": "3 agents appending to one shared state.json (classic lost-update race)",
-      "timestamp": "2026-04-08T21:20:19.745Z",
+      "timestamp": "2026-04-14T21:07:33.690Z",
       "conditions": [
         {
           "label": "naive",
@@ -40,14 +42,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 4.656779661016949,
-            "mean_parallelism": 2.590426098251741,
+            "mean_token_overhead": 3.6930422919508867,
+            "mean_parallelism": 2.943745777119069,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 3,
-            "mean_total_cost_usd": 1.00223375,
-            "units_per_dollar": 2.9933136855548916,
-            "mean_wall_seconds": 46.961
+            "mean_total_cost_usd": 0.37872675,
+            "units_per_dollar": 7.921278335897847,
+            "mean_wall_seconds": 45.881,
+            "expected_units": 3,
+            "coverage_fraction": 1
           }
         },
         {
@@ -58,14 +62,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.801340579710145,
-            "individual_pass_rate": 0,
-            "merged_pass_rate": 0,
-            "mean_unique_units": 1,
-            "mean_total_cost_usd": 1.237508,
-            "units_per_dollar": 0.8080755841578398,
-            "mean_wall_seconds": 55.2
+            "mean_token_overhead": 3.2067156348373556,
+            "mean_parallelism": 2.8546149757377273,
+            "individual_pass_rate": 1,
+            "merged_pass_rate": 1,
+            "mean_unique_units": 3,
+            "mean_total_cost_usd": 0.43504725,
+            "units_per_dollar": 6.895802697293225,
+            "mean_wall_seconds": 58.321,
+            "expected_units": 3,
+            "coverage_fraction": 1
           }
         }
       ]
@@ -73,7 +79,7 @@
     {
       "name": "multi-term-commit",
       "description": "2 sequential agents, shared git repo. Session A edits foo+bar (no commit), Session B edits baz+qux and runs `git commit -am`. Naive condition lets B's commit include A's WIP; hooked condition blocks it.",
-      "timestamp": "2026-04-08T21:18:18.191Z",
+      "timestamp": "2026-04-14T22:55:59.717Z",
       "conditions": [
         {
           "label": "naive",
@@ -83,14 +89,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 3.647702407002188,
-            "mean_parallelism": 0.9999230414037248,
+            "mean_token_overhead": 2.76993583868011,
+            "mean_parallelism": 0.9999116193376889,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 0,
-            "mean_total_cost_usd": 0.77377775,
+            "mean_total_cost_usd": 0.46411099999999994,
             "units_per_dollar": 0,
-            "mean_wall_seconds": 90.958
+            "mean_wall_seconds": 147.091,
+            "expected_units": null,
+            "coverage_fraction": null
           }
         },
         {
@@ -101,14 +109,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 3.7648456057007125,
-            "mean_parallelism": 0.9999111336803351,
+            "mean_token_overhead": 2.898981989036805,
+            "mean_parallelism": 0.9999082456569611,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 2,
-            "mean_total_cost_usd": 0.5914685,
+            "mean_total_cost_usd": 0.4478485,
             "units_per_dollar": 0,
-            "mean_wall_seconds": 78.77
+            "mean_wall_seconds": 196.176,
+            "expected_units": null,
+            "coverage_fraction": null
           }
         }
       ]
@@ -116,7 +126,7 @@
     {
       "name": "real-codebase",
       "description": "3 agents adding interdependent features (type field, validation, logging) to a small Node.js project",
-      "timestamp": "2026-04-08T19:36:37.310Z",
+      "timestamp": "2026-04-14T21:09:35.867Z",
       "conditions": [
         {
           "label": "naive",
@@ -126,14 +136,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 4.423472889498971,
-            "mean_parallelism": 2.457557134626464,
+            "mean_token_overhead": 4.436619718309859,
+            "mean_parallelism": 2.5887431989456253,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 3,
-            "mean_total_cost_usd": 1.41216425,
-            "units_per_dollar": 2.1243987730180818,
-            "mean_wall_seconds": 62.484
+            "mean_total_cost_usd": 0.47364325,
+            "units_per_dollar": 6.333881038101989,
+            "mean_wall_seconds": 59.182,
+            "expected_units": null,
+            "coverage_fraction": null
           }
         },
         {
@@ -144,14 +156,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 8.48076923076923,
-            "mean_parallelism": 1.5999782373173235,
+            "mean_token_overhead": 5.32514450867052,
+            "mean_parallelism": 2.363422167032827,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 3,
-            "mean_total_cost_usd": 1.0931145000000002,
-            "units_per_dollar": 2.7444517477354835,
-            "mean_wall_seconds": 211.371
+            "mean_total_cost_usd": 0.4234,
+            "units_per_dollar": 7.085498346717053,
+            "mean_wall_seconds": 62.814,
+            "expected_units": null,
+            "coverage_fraction": null
           }
         }
       ]
@@ -159,7 +173,7 @@
     {
       "name": "shared-routes",
       "description": "3 agents adding GET+POST routes to one shared routes.js file",
-      "timestamp": "2026-04-08T18:42:00.000Z",
+      "timestamp": "2026-04-14T21:05:49.339Z",
       "conditions": [
         {
           "label": "naive",
@@ -169,14 +183,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.78,
+            "mean_token_overhead": 4.9271186440677965,
+            "mean_parallelism": 2.468023353919881,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 6,
-            "mean_total_cost_usd": 1.533,
-            "units_per_dollar": 3.91,
-            "mean_wall_seconds": 58.9
+            "mean_total_cost_usd": 0.39997675,
+            "units_per_dollar": 15.00087192568068,
+            "mean_wall_seconds": 59.262,
+            "expected_units": 6,
+            "coverage_fraction": 1
           }
         },
         {
@@ -187,14 +203,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.42,
+            "mean_token_overhead": 6.301854974704891,
+            "mean_parallelism": 2.2015167175723227,
             "individual_pass_rate": 1,
             "merged_pass_rate": 1,
             "mean_unique_units": 6,
-            "mean_total_cost_usd": 0.669,
-            "units_per_dollar": 8.97,
-            "mean_wall_seconds": 37.1
+            "mean_total_cost_usd": 0.474072,
+            "units_per_dollar": 12.656305371336,
+            "mean_wall_seconds": 86.107,
+            "expected_units": 6,
+            "coverage_fraction": 1
           }
         }
       ]
@@ -202,7 +220,7 @@
     {
       "name": "workspace-decision",
       "description": "3 agents in a shared workspace with 6 files and NO pre-assignment — naive vs file-coord hook vs pipeline-claim",
-      "timestamp": "2026-04-08T21:37:49.946Z",
+      "timestamp": "2026-04-14T21:19:36.509Z",
       "conditions": [
         {
           "label": "naive",
@@ -212,14 +230,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.058718412792962,
-            "individual_pass_rate": 0,
-            "merged_pass_rate": 0,
-            "mean_unique_units": 4,
-            "mean_total_cost_usd": 1.36131925,
-            "units_per_dollar": 2.9383261861609613,
-            "mean_wall_seconds": 87.298
+            "mean_token_overhead": 4.080174021131137,
+            "mean_parallelism": 2.563943436193966,
+            "individual_pass_rate": 1,
+            "merged_pass_rate": 1,
+            "mean_unique_units": 6,
+            "mean_total_cost_usd": 0.77056175,
+            "units_per_dollar": 7.786527166706626,
+            "mean_wall_seconds": 87.335,
+            "expected_units": 6,
+            "coverage_fraction": 1
           }
         },
         {
@@ -230,14 +250,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.649248485254243,
-            "individual_pass_rate": 0,
-            "merged_pass_rate": 0,
-            "mean_unique_units": 4,
-            "mean_total_cost_usd": 1.3886917500000002,
-            "units_per_dollar": 2.8804088452314915,
-            "mean_wall_seconds": 59.746
+            "mean_token_overhead": 4.3446428571428575,
+            "mean_parallelism": 2.4641736044765934,
+            "individual_pass_rate": 1,
+            "merged_pass_rate": 1,
+            "mean_unique_units": 6,
+            "mean_total_cost_usd": 0.7274375,
+            "units_per_dollar": 8.248131282756251,
+            "mean_wall_seconds": 87.924,
+            "expected_units": 6,
+            "coverage_fraction": 1
           }
         },
         {
@@ -248,14 +270,16 @@
             "n_runs": 1,
             "file_collision_rate": 0,
             "duplicate_subgoal_rate": 0,
-            "mean_token_overhead": 0,
-            "mean_parallelism": 2.4128241786138984,
-            "individual_pass_rate": 0,
-            "merged_pass_rate": 0,
-            "mean_unique_units": 5,
-            "mean_total_cost_usd": 1.46024675,
-            "units_per_dollar": 3.4240788414697723,
-            "mean_wall_seconds": 74.843
+            "mean_token_overhead": 4.037215411558669,
+            "mean_parallelism": 2.410518780915323,
+            "individual_pass_rate": 1,
+            "merged_pass_rate": 1,
+            "mean_unique_units": 6,
+            "mean_total_cost_usd": 0.9903575,
+            "units_per_dollar": 6.058418298442734,
+            "mean_wall_seconds": 108.967,
+            "expected_units": 6,
+            "coverage_fraction": 1
           }
         }
       ]

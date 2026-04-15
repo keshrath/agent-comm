@@ -441,12 +441,19 @@ describe('Concurrent-like operations', () => {
   it('CAS with TTL: claim auto-expires so a dead agent does not hold the lock', async () => {
     const a1 = ctx.agents.register({ name: 'cas-ttl-1' });
     const a2 = ctx.agents.register({ name: 'cas-ttl-2' });
-    // a1 claims with a very short TTL
-    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a1.name, a1.id, 1)).toBe(true);
+    // SQLite's datetime('now') has second-level precision. To avoid a flake
+    // where the claim straddles a second-boundary (making the "still held"
+    // assertion race against expiry), we use a TTL of 2s and a wait of 3s.
+    // That leaves > 1s of guaranteed clock-rollover margin on both sides.
+    const TTL_S = 2;
+    const WAIT_MS = 3000;
+
+    // a1 claims with a short TTL
+    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a1.name, a1.id, TTL_S)).toBe(true);
     // a2's immediate claim must fail because a1 holds the lock
-    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a2.name, a2.id, 1)).toBe(false);
+    expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a2.name, a2.id, TTL_S)).toBe(false);
     // After the TTL expires, a2's claim succeeds (lazy expiry on get)
-    await new Promise((r) => setTimeout(r, 1100));
+    await new Promise((r) => setTimeout(r, WAIT_MS));
     expect(ctx.state.compareAndSwap('locks', 'file.ts', null, a2.name, a2.id, 60)).toBe(true);
   });
 

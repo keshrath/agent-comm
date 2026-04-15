@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "id": "task-1",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Summarize Linux file locking options"
+    },
+    {
+      "id": "task-2",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Explain compare-and-swap primitives"
+    },
+    {
+      "id": "task-3",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Compare optimistic vs pessimistic locking"
+    },
+    {
+      "id": "task-4",
+      "status": "pending",
+      "claimed_by": null,
+      "title": "Describe lease-based coordination"
+    }
+  ]
+}

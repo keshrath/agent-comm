@@ -42,7 +42,7 @@ agent-comm has two entry points:
 Internally, the project uses a layered architecture:
 
 ```
-domain/      Agents, channels, messages, state, reactions, feed, cleanup, rate-limit, events
+domain/      Agents, channels, messages, state, feed, cleanup, rate-limit, events
 storage/     SQLite via better-sqlite3 (WAL mode)
 transport/   REST (node:http), WebSocket (ws), MCP (stdio JSON-RPC)
 ui/          Vanilla JS dashboard (no build step for the UI itself)
@@ -220,7 +220,7 @@ The dashboard connects via WebSocket. On connect, it receives the full state. Af
 
 ## 5. MCP Tools Reference
 
-agent-comm exposes 7 MCP tools. Each tool is described below with its parameters, example usage, and error cases.
+agent-comm exposes 7 MCP tools. Each tool is described below with its parameters, example usage, and error cases. Full-text search (FTS5) is available via REST (`GET /api/messages/search`) for the dashboard's human-facing search bar, not as an agent tool — agents use `comm_inbox` with filters instead.
 
 ### comm_register
 
@@ -397,11 +397,12 @@ Read messages in your inbox (direct messages and channel messages).
 
 **Parameters:**
 
-| Name          | Type    | Required | Description                                                                 |
-| ------------- | ------- | -------- | --------------------------------------------------------------------------- |
-| `unread_only` | boolean | No       | Only unread messages (default: true)                                        |
-| `limit`       | number  | No       | Max messages (default: 50, max: 500)                                        |
-| `thread_id`   | number  | No       | When provided, returns the full thread for this message ID instead of inbox |
+| Name          | Type    | Required | Description                                                                    |
+| ------------- | ------- | -------- | ------------------------------------------------------------------------------ |
+| `unread_only` | boolean | No       | Only unread messages (default: true)                                           |
+| `limit`       | number  | No       | Max messages (default: 50, max: 500)                                           |
+| `importance`  | string  | No       | Only return messages at this importance level (`low`/`normal`/`high`/`urgent`) |
+| `thread_id`   | number  | No       | When provided, returns the full thread for this message ID instead of inbox    |
 
 **Examples:**
 
@@ -409,7 +410,36 @@ Read messages in your inbox (direct messages and channel messages).
 comm_inbox
 comm_inbox with unread_only false, limit 100
 comm_inbox with thread_id 15
+comm_inbox with importance "urgent"
 ```
+
+---
+
+### comm_poll
+
+Block until a new inbox message arrives (matching the filter) or the timeout
+elapses. Replaces busy-poll loops of the form `comm_inbox` + `sleep`. Returns
+immediately if the inbox already has matching messages.
+
+**Parameters:**
+
+| Name          | Type    | Required | Description                                                                    |
+| ------------- | ------- | -------- | ------------------------------------------------------------------------------ |
+| `timeout_ms`  | number  | No       | Max wait in ms (default: 5000, max: 60000)                                     |
+| `unread_only` | boolean | No       | Only unread messages (default: true)                                           |
+| `limit`       | number  | No       | Max messages (default: 50, max: 500)                                           |
+| `importance`  | string  | No       | Only return messages at this importance level (`low`/`normal`/`high`/`urgent`) |
+
+**Examples:**
+
+```
+comm_poll
+comm_poll with timeout_ms 2000, importance "urgent"
+comm_poll with timeout_ms 30000, limit 10
+```
+
+**When to use:** in a long-running task, insert `comm_poll({ timeout_ms: 2000, importance: "urgent" })` between major steps so peer-sent urgent messages
+(e.g. a STOP signal) are consumed promptly without burning tokens on sleep+poll loops.
 
 ---
 
@@ -565,29 +595,6 @@ comm_state with action "cas", namespace "locks", key "deploy", expected "my-agen
 **Error cases:**
 
 - Key not found (for get/delete when key does not exist).
-
----
-
-### comm_search
-
-Full-text search across all messages using FTS5.
-
-**Parameters:**
-
-| Name      | Type   | Required | Description                       |
-| --------- | ------ | -------- | --------------------------------- |
-| `query`   | string | Yes      | Search query                      |
-| `channel` | string | No       | Limit to a channel name           |
-| `from`    | string | No       | Filter by sender agent name or ID |
-| `limit`   | number | No       | Max results (default: 20)         |
-
-**Examples:**
-
-```
-comm_search with query "auth module"
-comm_search with query "deploy", channel "general"
-comm_search with query "error", from "test-agent", limit 10
-```
 
 ---
 

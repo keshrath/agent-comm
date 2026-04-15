@@ -28,8 +28,8 @@ When you run multiple AI agents on the same codebase — code review in one term
 
 - Agents **register** with a name, capabilities, and skills so others can discover them
 - They **discover** each other by skill or tag for dynamic task routing
-- They exchange **messages** (direct, broadcast, or channel-based) to coordinate
-- They **react** to messages for lightweight signaling ("+1", "done", "blocked")
+- They exchange **messages** (direct, broadcast, or channel-based) to coordinate, with importance levels (`low`/`normal`/`high`/`urgent`) and optional ack
+- They **poll** their inbox with a blocking wait (`comm_poll`) so mid-flight peer signals are consumed without busy-looping
 - They share **state** (a key-value store with atomic CAS) for locks, flags, and progress
 - They log **activity events** (commits, test results, file edits) to a shared feed
 - They detect **stuck agents** — alive (heartbeat OK) but not making progress
@@ -44,7 +44,7 @@ The MCP tools (`comm_state`, etc.) give agents the _primitives_ to coordinate, b
 
 The fix is a pair of `PreToolUse` hooks shipped in `scripts/hooks/`: **`file-coord`** intercepts every `Edit`/`Write`/`MultiEdit` and claims the file via REST `POST /api/state/file-locks/<path>/cas` (blocks the edit if another agent holds the lock); **`bash-guard`** intercepts `git commit`, `git push`, `npm install`, `npm test`, builds, migrations, and dev-server starts and blocks/warns when they would conflict with another session's WIP. **The protocol becomes infrastructure, not a prompt the agent might ignore.**
 
-The bench's headline pilot is **`multi-term-commit`** — directly modeling the daily pain of two terminal sessions on the same project. Session A edits two files but doesn't commit. Session B then edits two other files and runs `git commit -am "my work"`. Without the hook, B's commit silently includes A's WIP. With the hook, B's commit is blocked at the bash layer with an actionable message, and B reacts (selective staging, restore, or coordinate). Bench v1.3.4 result:
+The bench's headline pilot is **`multi-term-commit`** — directly modeling the daily pain of two terminal sessions on the same project. Session A edits two files but doesn't commit. Session B then edits two other files and runs `git commit -am "my work"`. Without the hook, B's commit silently includes A's WIP. With the hook, B's commit is blocked at the bash layer with an actionable message, and B reacts (selective staging, restore, or coordinate). Bench result:
 
 |               | naive (no hook)                            | **with hooks**            |
 | ------------- | ------------------------------------------ | ------------------------- |
@@ -53,7 +53,7 @@ The bench's headline pilot is **`multi-term-commit`** — directly modeling the 
 | Total cost    | $0.774                                     | **$0.591 (-24%)**         |
 | Outcome       | A's WIP silently committed under B's name  | clean commit, no clobber  |
 
-The hook is **faster AND cheaper**, not just safer. Reason: when agents lack coordination on shared workspaces, they read stale state, get confused mid-task, retry, and re-think. Serializing access and surfacing the conflict early removes that wasted thinking. Run `npm run setup` to install both hooks automatically; see [Setup → File Coordination](docs/SETUP.md#pretooluse--posttooluse--scriptshooksfile-coordmjs) for manual install on Claude Code, OpenCode, or any custom MCP client.
+The hook is **faster AND cheaper**, not just safer. Reason: when agents lack coordination on shared workspaces, they read stale state, get confused mid-task, retry, and re-think. Serializing access and surfacing the conflict early removes that wasted thinking. Run `npm run setup` to install both hooks automatically; see [Setup → File Coordination](docs/SETUP.md#pretooluse--posttooluse--scriptshooksfile-coordmjs) for manual install on Claude Code, OpenCode, or any custom MCP client. See [bench/README.md](bench/README.md) for the measurement methodology.
 
 ### How agent-comm fits together
 
@@ -137,7 +137,7 @@ node dist/server.js --port 3421
 npm run setup
 ```
 
-Registers the MCP server in `~/.claude.json`, installs all five [hook scripts](docs/SETUP.md#hooks) (lifecycle + the v1.3.0 file-coord coordination hook), and configures permissions. **Other hosts**: see [docs/SETUP.md](docs/SETUP.md#client-setup) for the per-host integration recipes — every host that supports pre-tool-call hooks can use the same `file-coord.mjs` script unchanged.
+Registers the MCP server in `~/.claude.json`, installs the [hook scripts](docs/SETUP.md#hooks) (lifecycle + file-coord + bash-guard), and configures permissions. **Other hosts**: see [docs/SETUP.md](docs/SETUP.md#client-setup) for the per-host integration recipes — every host that supports pre-tool-call hooks can use the same `file-coord.mjs` script unchanged.
 
 ## MCP tools (7)
 
@@ -146,10 +146,10 @@ Registers the MCP server in `~/.claude.json`, installs all five [hook scripts](d
 | `comm_register` | Register with name, capabilities, metadata, skills, and auto-join channels                                 |
 | `comm_agents`   | Agent management — actions: `list`, `discover`, `whoami`, `heartbeat`, `status`, `unregister`              |
 | `comm_send`     | Send messages — direct (`to`), channel, broadcast, reply (`reply_to`), forward (`forward`)                 |
-| `comm_inbox`    | Read inbox (direct + channel messages, unread filter, thread view via `thread_id`)                         |
+| `comm_inbox`    | Read inbox (direct + channel messages, unread filter, `importance` filter, thread view via `thread_id`)    |
+| `comm_poll`     | Block until a new inbox message arrives (supports `timeout_ms` and `importance` filter)                    |
 | `comm_channel`  | Channel management — actions: `create`, `list`, `join`, `leave`, `archive`, `update`, `members`, `history` |
 | `comm_state`    | Shared key-value state — actions: `set`, `get`, `list`, `delete`, `cas`                                    |
-| `comm_search`   | Full-text search across all messages                                                                       |
 
 ## REST API
 

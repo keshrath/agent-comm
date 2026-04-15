@@ -168,7 +168,6 @@ describe('MCP Tool Handler', () => {
   describe('authorization', () => {
     it('requires registration for all reading tools', () => {
       const h = createToolHandler(ctx);
-      expect(() => h('comm_search', { query: 'x' })).toThrow('Not registered');
       expect(() => h('comm_channel', { action: 'list' })).toThrow('Not registered');
       expect(() => h('comm_channel', { action: 'members', channel: 'x' })).toThrow(
         'Not registered',

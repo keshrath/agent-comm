@@ -1,0 +1,12 @@
+{
+  "name": "agent-comm",
+  "description": "Agent-to-agent messaging for AI coding agents — sessions, direct/broadcast/channel messages, shared state, real-time feed, and a file-coordination hook for parallel edits.",
+  "version": "1.3.9",
+  "author": {
+    "name": "keshrath"
+  },
+  "homepage": "https://github.com/keshrath/agent-comm",
+  "repository": "https://github.com/keshrath/agent-comm",
+  "license": "MIT",
+  "keywords": ["mcp", "multi-agent", "messaging", "coordination", "claude-code"]
+}

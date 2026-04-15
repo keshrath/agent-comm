@@ -204,8 +204,14 @@ export class MessageService {
   }
 
   /** Get the inbox for an agent: direct messages + messages from joined channels */
-  inbox(agentId: string, options: { unreadOnly?: boolean; limit?: number } = {}): Message[] {
+  inbox(
+    agentId: string,
+    options: { unreadOnly?: boolean; limit?: number; importance?: MessageImportance } = {},
+  ): Message[] {
     const limit = Math.min(Math.max(1, options.limit ?? 50), 500);
+    if (options.importance && !VALID_IMPORTANCE.has(options.importance)) {
+      throw new ValidationError(`Invalid importance: ${options.importance}`);
+    }
 
     let sql = `
       SELECT m.* FROM messages m
@@ -220,6 +226,11 @@ export class MessageService {
     if (options.unreadOnly) {
       sql += ` AND NOT EXISTS (SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.agent_id = ?)`;
       params.push(agentId);
+    }
+
+    if (options.importance) {
+      sql += ` AND m.importance = ?`;
+      params.push(options.importance);
     }
 
     sql += ` ORDER BY m.created_at DESC LIMIT ?`;
@@ -290,6 +301,45 @@ export class MessageService {
     return this.db.queryAll<MessageRead>(`SELECT * FROM message_reads WHERE message_id = ?`, [
       messageId,
     ]);
+  }
+
+  /** Blocking inbox wait — resolves as soon as a new message arrives that
+   * matches the inbox filter, or when timeout_ms elapses. Used to replace
+   * busy-poll loops in coordinating agents. */
+  pollInbox(
+    agentId: string,
+    timeoutMs: number,
+    options: { unreadOnly?: boolean; limit?: number; importance?: MessageImportance } = {},
+  ): Promise<Message[]> {
+    // First check: if we already have matches, return synchronously.
+    const initial = this.inbox(agentId, options);
+    if (initial.length > 0) return Promise.resolve(initial);
+
+    const cappedTimeout = Math.min(Math.max(0, timeoutMs), 60_000);
+    if (cappedTimeout === 0) return Promise.resolve([]);
+
+    return new Promise<Message[]>((resolve) => {
+      let done = false;
+      let timer: NodeJS.Timeout | null = null;
+      let unsubscribe: (() => void) | null = null;
+
+      const finish = (result: Message[]): void => {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        if (unsubscribe) unsubscribe();
+        resolve(result);
+      };
+
+      unsubscribe = this.events.on('message:sent', () => {
+        // A message landed somewhere in the system — re-check our inbox with
+        // the filter. Cheap: one indexed SELECT.
+        const fresh = this.inbox(agentId, options);
+        if (fresh.length > 0) finish(fresh);
+      });
+
+      timer = setTimeout(() => finish([]), cappedTimeout);
+    });
   }
 
   /** Full-text search across messages */

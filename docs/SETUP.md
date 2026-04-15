@@ -176,7 +176,13 @@ Hooks automate the agent lifecycle — registration, inbox checks, and cleanup. 
 
 ### Claude Code Hooks
 
-agent-comm ships with **five** hook scripts across eight events (lifecycle + system-layer file coordination). Run `npm run setup` to install them, or configure manually in `~/.claude/settings.json`:
+agent-comm ships the following hooks:
+
+- **Enforcing** (active, exit 2 blocks) — `file-coord.mjs` (lock-or-fail on Edit/Write/MultiEdit) and `bash-guard.mjs` (blocks `git commit -am` that would clobber another session's WIP). Both bench-validated. **Recommended.**
+- **Lifecycle** — `session-start.js`, `check-registration.js`, `on-stop.js`, `workspace-awareness.mjs`. Inject dashboard URL, remind unregistered agents, surface workspace facts, and clean up on exit. Factual context injection only. **Recommended.**
+- **Optional** — `check-inbox.js`. Advisory PostToolUse hook that nudges the agent when there are unread messages. Not default-installed because advisory nudges don't reliably redirect the model during focused work. For peer-sent urgent signals, prefer `comm_poll` with an `importance` filter in the agent's prompt (see the `comm_poll` MCP tool reference).
+
+Run `npm run setup` to install the recommended hooks, or configure manually in `~/.claude/settings.json`:
 
 ```json
 {
@@ -199,17 +205,6 @@ agent-comm ships with **five** hook scripts across eight events (lifecycle + sys
             "type": "command",
             "command": "node \"/path/to/agent-comm/scripts/hooks/check-registration.js\"",
             "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/path/to/agent-comm/scripts/hooks/check-inbox.js\"",
-            "timeout": 5
           }
         ]
       }
@@ -291,9 +286,32 @@ Reads the SQLite database on every user message to:
 2. If agents online and messages in the last 5 minutes -> tells the agent to call `comm_inbox`
 3. Otherwise -> silent (empty JSON, ~0 tokens)
 
-#### PostToolUse (`scripts/hooks/check-inbox.js`)
+#### PostToolUse (`scripts/hooks/check-inbox.js`) — optional advisory
 
-Runs after every tool call to check for recent messages (last 2 minutes). Skips agent-comm's own tools to avoid redundant nudges. Combined with UserPromptSubmit, agents are nudged both on user prompts and during active tool use.
+Runs after every tool call to check for recent messages (last 2 minutes). Skips agent-comm's own tools to avoid redundant nudges.
+
+**Not default-installed.** Advisory nudges ("you have unread messages") don't reliably redirect the model during focused work. For peer-sent urgent signals, prefer one of:
+
+1. **`comm_poll` in the agent's prompt** — add "after each step, call `comm_poll({ timeout_ms: 2000, importance: 'urgent' })`" to the task contract. The blocking poll with an importance filter causes the model to pivot on urgent peer messages without burning tokens on sleep+poll loops.
+2. **Importance-filtered `comm_inbox`** — if the prompt already polls inbox periodically, the `importance: "urgent"` filter cuts parsing cost.
+
+Opt-in configuration (if you still want the hook):
+
+```json
+"PostToolUse": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "node \"/path/to/agent-comm/scripts/hooks/check-inbox.js\"",
+        "timeout": 5
+      }
+    ]
+  }
+]
+```
+
+Add this block alongside the PostToolUse entry for `file-coord.mjs` if you keep both.
 
 #### SubagentStart (`scripts/hooks/session-start.js`)
 
@@ -313,7 +331,7 @@ Reuses the same `on-stop.js` script for subagents. Ensures subagents post a summ
 
 #### PreToolUse + PostToolUse — `scripts/hooks/file-coord.mjs`
 
-**The system-layer file coordination hook.** This is the most important hook for multi-agent workflows because it enforces coordination at the tool layer instead of relying on the model to remember to call MCP tools. v3-v6 of the bench (see `bench/README.md`) proved that prompt-only coordination is unreliable: Claude follows procedural instructions for the first claim cycle then drifts back to "be helpful, finish the task." A hook removes the choice — there's no way to Edit a file without going through it.
+**The system-layer file coordination hook.** This is the most important hook for multi-agent workflows because it enforces coordination at the tool layer instead of relying on the model to remember to call MCP tools. Prompt-only coordination is unreliable: Claude follows procedural instructions for the first claim cycle then drifts back to "be helpful, finish the task." A hook removes the choice — there's no way to Edit a file without going through it.
 
 **How it works:**
 
@@ -356,7 +374,7 @@ If the agent-comm dashboard isn't running or isn't reachable within ~1.5s, the h
 - **Always**, if you use the Task tool / subagent fan-out for parallel feature work
 - **Skip** if you only ever run a single Claude Code session at a time on isolated work — the hook is wasted overhead in that case
 
-**Bench measurement** (3 agents on 1 shared file, 2 routes each): hooked is **56% cheaper, 37% faster, 130% more efficient** than naive parallel multi-agent, AND deterministic where naive is unstable. See `bench/README.md` for the v7 details.
+**Bench measurement** (3 agents on 1 shared file, 2 routes each): hooked is **56% cheaper, 37% faster, 130% more efficient** than naive parallel multi-agent, AND deterministic where naive is unstable. See `bench/README.md` for methodology.
 
 ### OpenCode Plugins
 
@@ -428,7 +446,7 @@ The hook itself doesn't care which host launched it — the same `file-coord.mjs
 
 Cursor and Windsurf don't expose pre/post tool-call hooks at the time of writing, so the file-coord hook **cannot be installed there** — there's no extension point to plug it into. Two workarounds:
 
-1. **Use the agent-comm dashboard for visibility, not enforcement.** Cursor/Windsurf agents can still call `mcp__agent-comm__comm_state` via MCP tools to claim and release locks, but compliance depends on the model following instructions in `.cursorrules` / `.windsurfrules`. v3-v6 of our bench shows this is unreliable on its own.
+1. **Use the agent-comm dashboard for visibility, not enforcement.** Cursor/Windsurf agents can still call `mcp__agent-comm__comm_state` via MCP tools to claim and release locks, but compliance depends on the model following instructions in `.cursorrules` / `.windsurfrules`, which is unreliable on its own.
 2. **Run a one-shot wrapper** outside Cursor/Windsurf. Have a watchdog Node process tail the editor's edit events (via filesystem watcher or LSP) and call `file-coord.mjs` from there. This is more brittle but recovers some of the safety net.
 
 For the cleanest experience on these platforms, use the **shared state + dashboard** for ad-hoc visibility and accept that file-level coordination is not enforced. If you need hard enforcement, switch to a host that supports tool-call hooks (Claude Code, OpenCode).

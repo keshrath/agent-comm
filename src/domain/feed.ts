@@ -26,6 +26,10 @@ const VALID_TYPES = new Set([
   'channel_leave',
   'handoff',
   'branch',
+  // Hook-emitted conflict block (file-coord held-by-other, bash-guard exit 2).
+  // Surfaces the "prevented disaster" moment so the Activity Feed shows the
+  // rare-but-real value of the coordination layer.
+  'hook-block',
 ]);
 
 const MAX_PREVIEW_LENGTH = 500;

@@ -269,3 +269,69 @@ describe('aggregate', () => {
     expect(() => aggregate([])).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// coverage_fraction — graded partial-success metric
+// ---------------------------------------------------------------------------
+
+describe('coverage_fraction', () => {
+  function runWithUnits(units: string[]): MultiAgentRun {
+    return mkRun({
+      agents: [mkAgent({ agent: 'a', units_completed: units, tests_passed: false })],
+    });
+  }
+
+  it('is null when expected_units is not provided', () => {
+    const r = aggregate([runWithUnits(['u1', 'u2'])]);
+    expect(r.expected_units).toBeNull();
+    expect(r.coverage_fraction).toBeNull();
+  });
+
+  it('is null when expected_units is explicitly null', () => {
+    const r = aggregate([runWithUnits(['u1', 'u2'])], { expected_units: null });
+    expect(r.expected_units).toBeNull();
+    expect(r.coverage_fraction).toBeNull();
+  });
+
+  it('is null when expected_units is 0 (no fake division by zero)', () => {
+    const r = aggregate([runWithUnits(['u1'])], { expected_units: 0 });
+    expect(r.expected_units).toBe(0);
+    expect(r.coverage_fraction).toBeNull();
+  });
+
+  it('computes 4/6 = 0.67 for partial coverage', () => {
+    const r = aggregate([runWithUnits(['u1', 'u2', 'u3', 'u4'])], { expected_units: 6 });
+    expect(r.expected_units).toBe(6);
+    expect(r.coverage_fraction).toBeCloseTo(4 / 6);
+  });
+
+  it('is 1.0 when all expected units are delivered', () => {
+    const r = aggregate([runWithUnits(['u1', 'u2', 'u3', 'u4', 'u5', 'u6'])], {
+      expected_units: 6,
+    });
+    expect(r.coverage_fraction).toBe(1);
+  });
+
+  it('is 0 when no units are delivered', () => {
+    const r = aggregate([runWithUnits([])], { expected_units: 6 });
+    expect(r.coverage_fraction).toBe(0);
+  });
+
+  it('is capped at 1.0 when units exceed expected', () => {
+    const r = aggregate([runWithUnits(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'])], {
+      expected_units: 6,
+    });
+    expect(r.coverage_fraction).toBe(1);
+    // mean_unique_units itself is NOT clamped — coverage is the clamp, raw count stays.
+    expect(r.mean_unique_units).toBe(8);
+  });
+
+  it('averages across runs before dividing', () => {
+    const r = aggregate([runWithUnits(['u1', 'u2']), runWithUnits(['u3', 'u4', 'u5', 'u6'])], {
+      expected_units: 6,
+    });
+    // mean unique = (2 + 4) / 2 = 3 → 3/6 = 0.5
+    expect(r.mean_unique_units).toBe(3);
+    expect(r.coverage_fraction).toBeCloseTo(0.5);
+  });
+});

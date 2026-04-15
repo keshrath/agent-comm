@@ -160,6 +160,6 @@ npm run check        # Full CI: typecheck + lint + format + test
 | Domain: Events         | 7     | Pub/sub, wildcards, unsubscribe, error isolation                      |
 | Domain: Rate limit     | 6     | Token bucket capacity, refill, isolation, reset                       |
 | Domain: Edge cases     | 43    | Boundary values, injection prevention, concurrency, data integrity    |
-| Transport: MCP         | 34    | All 9 tools, auth gates, rate limiting, input validation              |
+| Transport: MCP         | 34    | All 7 tools, auth gates, rate limiting, input validation              |
 | Integration: Workflows | 10    | Multi-agent scenarios (coordination, CAS locking, forwarding, search) |
 | E2E: Server            | 21    | REST endpoints, WebSocket state/events, export, error codes           |

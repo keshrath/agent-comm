@@ -1,0 +1,154 @@
+{
+  "scenario": "b4-skill-discovery",
+  "version": "1.3.9",
+  "generated_at": "2026-04-15T12:39:56.217Z",
+  "args": {
+    "dryRun": false,
+    "real": true,
+    "n": 3,
+    "maxCostUsd": 15,
+    "conditions": ["with-discover", "without-discover"]
+  },
+  "aggregates": [
+    {
+      "condition": "with-discover",
+      "n": 3,
+      "per_run": [
+        {
+          "found_correct": 1,
+          "found_any": 1,
+          "discover_used": 0,
+          "wall_seconds": 55.586,
+          "total_cost_usd": 0.15871275,
+          "target_name": "worker-test-a3093",
+          "found_raw": "worker-test-a3093"
+        },
+        {
+          "found_correct": 1,
+          "found_any": 1,
+          "discover_used": 0,
+          "wall_seconds": 43.436,
+          "total_cost_usd": 0.16789150000000003,
+          "target_name": "worker-test-32a30",
+          "found_raw": "worker-test-32a30"
+        },
+        {
+          "found_correct": 1,
+          "found_any": 1,
+          "discover_used": 0,
+          "wall_seconds": 61.421,
+          "total_cost_usd": 0.18998825,
+          "target_name": "worker-test-e3db4",
+          "found_raw": "worker-test-e3db4"
+        }
+      ],
+      "found_correct": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "found_any": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "discover_used": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 53.480999999999995,
+        "stddev": 7.491698739271354,
+        "min": 43.436,
+        "max": 61.421,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.1721975,
+        "stddev": 0.013126193966328033,
+        "min": 0.15871275,
+        "max": 0.18998825,
+        "n": 3
+      },
+      "passed": true,
+      "stopped_early": false
+    },
+    {
+      "condition": "without-discover",
+      "n": 3,
+      "per_run": [
+        {
+          "found_correct": 1,
+          "found_any": 1,
+          "discover_used": 0,
+          "wall_seconds": 37.262,
+          "total_cost_usd": 0.0853295,
+          "target_name": "agent-23229-e6b3a",
+          "found_raw": "agent-23229-e6b3a"
+        },
+        {
+          "found_correct": 0,
+          "found_any": 1,
+          "discover_used": 0,
+          "wall_seconds": 44.618,
+          "total_cost_usd": 0.0746695,
+          "target_name": "agent-249cb-e82dc",
+          "found_raw": "agent-86654-e82dc"
+        },
+        {
+          "found_correct": 0,
+          "found_any": 1,
+          "discover_used": 0,
+          "wall_seconds": 27.857,
+          "total_cost_usd": 0.07350000000000001,
+          "target_name": "agent-ab3c1-6ecd1",
+          "found_raw": "agent-49738-6ecd1"
+        }
+      ],
+      "found_correct": {
+        "mean": 0.3333333333333333,
+        "stddev": 0.4714045207910317,
+        "min": 0,
+        "max": 1,
+        "n": 3
+      },
+      "found_any": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "discover_used": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 36.579,
+        "stddev": 6.859671858041025,
+        "min": 27.857,
+        "max": 44.618,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.077833,
+        "stddev": 0.005322284393628985,
+        "min": 0.07350000000000001,
+        "max": 0.0853295,
+        "n": 3
+      },
+      "passed": true,
+      "stopped_early": false
+    }
+  ]
+}

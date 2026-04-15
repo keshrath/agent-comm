@@ -1,0 +1,162 @@
+{
+  "scenario": "b5-cross-session",
+  "version": "1.3.9",
+  "generated_at": "2026-04-15T12:45:31.740Z",
+  "args": {
+    "dryRun": false,
+    "real": true,
+    "n": 3,
+    "maxCostUsd": 10,
+    "conditions": ["no-state", "with-state"]
+  },
+  "aggregates": [
+    {
+      "condition": "no-state",
+      "n": 3,
+      "per_run": [
+        {
+          "unique_reports": 2,
+          "duplicate_work_count": 2,
+          "tasks_by_A": 2,
+          "tasks_by_B": 2,
+          "wall_seconds": 82.029,
+          "total_cost_usd": 0.23906750000000002
+        },
+        {
+          "unique_reports": 2,
+          "duplicate_work_count": 2,
+          "tasks_by_A": 2,
+          "tasks_by_B": 2,
+          "wall_seconds": 109.831,
+          "total_cost_usd": 0.23953075000000001
+        },
+        {
+          "unique_reports": 2,
+          "duplicate_work_count": 2,
+          "tasks_by_A": 2,
+          "tasks_by_B": 2,
+          "wall_seconds": 105.064,
+          "total_cost_usd": 0.23744424999999997
+        }
+      ],
+      "unique_reports": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 3
+      },
+      "duplicate_work_count": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 3
+      },
+      "tasks_by_A": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 3
+      },
+      "tasks_by_B": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 98.97466666666666,
+        "stddev": 12.139406529517368,
+        "min": 82.029,
+        "max": 109.831,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.23868083333333331,
+        "stddev": 0.0008946149621795929,
+        "min": 0.23744424999999997,
+        "max": 0.23953075000000001,
+        "n": 3
+      },
+      "passed": true,
+      "stopped_early": false
+    },
+    {
+      "condition": "with-state",
+      "n": 3,
+      "per_run": [
+        {
+          "unique_reports": 4,
+          "duplicate_work_count": 0,
+          "tasks_by_A": 2,
+          "tasks_by_B": 2,
+          "wall_seconds": 179.181,
+          "total_cost_usd": 0.5367712499999999
+        },
+        {
+          "unique_reports": 4,
+          "duplicate_work_count": 0,
+          "tasks_by_A": 2,
+          "tasks_by_B": 2,
+          "wall_seconds": 194.539,
+          "total_cost_usd": 0.61234525
+        },
+        {
+          "unique_reports": 4,
+          "duplicate_work_count": 0,
+          "tasks_by_A": 2,
+          "tasks_by_B": 2,
+          "wall_seconds": 141.897,
+          "total_cost_usd": 0.507703
+        }
+      ],
+      "unique_reports": {
+        "mean": 4,
+        "stddev": 0,
+        "min": 4,
+        "max": 4,
+        "n": 3
+      },
+      "duplicate_work_count": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 3
+      },
+      "tasks_by_A": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 3
+      },
+      "tasks_by_B": {
+        "mean": 2,
+        "stddev": 0,
+        "min": 2,
+        "max": 2,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 171.87233333333333,
+        "stddev": 22.103657274055102,
+        "min": 141.897,
+        "max": 194.539,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.5522731666666666,
+        "stddev": 0.04410390902192103,
+        "min": 0.507703,
+        "max": 0.61234525,
+        "n": 3
+      },
+      "passed": true,
+      "stopped_early": false
+    }
+  ]
+}

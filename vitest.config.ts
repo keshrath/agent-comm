@@ -4,6 +4,12 @@ export default defineConfig({
   test: {
     globals: true,
     testTimeout: 10_000,
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.worktrees/**',
+      'bench/scenarios/**/workload/**',
+      'bench/workloads/**',
+    ],
   },
 });

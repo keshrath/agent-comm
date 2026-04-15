@@ -58,9 +58,8 @@ agent-comm/
     domain/
       agents.ts           Agent registration, heartbeat, presence, skill-based discovery
       channels.ts         Channel creation, join/leave, membership
-      messages.ts         Direct + channel messaging, threading, forwarding
+      messages.ts         Direct + channel messaging, threading, forwarding, importance filter, blocking poll
       state.ts            Shared key-value state with CAS support
-      reactions.ts        Message reactions
       feed.ts             Activity feed (structured event logging + queries)
       cleanup.ts          Stale agent/message cleanup
       rate-limit.ts       Per-agent rate limiting
@@ -68,7 +67,7 @@ agent-comm/
     storage/
       database.ts         SQLite (WAL mode, schema versioning V3, FK cascades)
     transport/
-      mcp.ts              36 MCP tool definitions + dispatch
+      mcp.ts              MCP tool definitions + dispatch (7 top-level tools)
       rest.ts             REST API endpoints + static file serving
       ws.ts               WebSocket event streaming
     ui/
@@ -80,9 +79,8 @@ agent-comm/
     domain/
       agents.test.ts      Agent registration, heartbeat, presence
       channels.test.ts    Channel CRUD, join/leave, messaging
-      messages.test.ts    Direct messaging, threading, forwarding
+      messages.test.ts    Direct messaging, threading, forwarding, importance filter, pollInbox
       state.test.ts       Shared state, CAS operations
-      reactions.test.ts   Message reactions
       rate-limit.test.ts  Rate limiting
       events.test.ts      Event bus
       edge-cases.test.ts  Edge cases and error handling
@@ -108,7 +106,7 @@ agent-comm/
 ## Testing
 
 ```bash
-npm test                          # Run all tests (253 across 13 files)
+npm test                          # Run the full test suite (unit + integration + e2e)
 npm run test:watch                # Watch mode
 npm run test:e2e                  # E2E server tests only
 npm run test:coverage             # Coverage report (v8 provider)
@@ -121,7 +119,7 @@ Tests use **vitest** with in-memory SQLite databases. Each test gets a fresh con
 
 ### What to Test
 
-- Domain: agent registration/presence, channel CRUD, messaging/threading, shared state/CAS, reactions, activity feed, rate limiting
+- Domain: agent registration/presence + skill discovery, channel CRUD, messaging/threading + importance filter + blocking poll, shared state/CAS, activity feed, rate limiting
 - Integration: multi-agent workflows, cross-feature interactions
 - Transport: MCP tool dispatch, REST endpoints, WebSocket events
 - E2E: HTTP server lifecycle, WebSocket connections

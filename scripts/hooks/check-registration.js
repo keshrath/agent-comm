@@ -10,6 +10,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { createRequire } from 'module';
+import { signalFailOpen } from './_fail-open.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -20,7 +21,10 @@ process.on('uncaughtException', (err) => {
 
 function check() {
   const dbPath = join(homedir(), '.agent-comm', 'agent-comm.db');
-  if (!existsSync(dbPath)) return { registered: false, recentMessages: 0, onlineAgents: 0 };
+  if (!existsSync(dbPath)) {
+    signalFailOpen('check-registration', 'sqlite-missing', { dbPath }).catch(() => {});
+    return { registered: false, recentMessages: 0, onlineAgents: 0 };
+  }
 
   try {
     const Database = require('better-sqlite3');
@@ -47,6 +51,9 @@ function check() {
     };
   } catch (err) {
     process.stderr.write(`[agent-comm hook] ${err.message}\n`);
+    signalFailOpen('check-registration', 'sqlite-error', {
+      error: err && err.message ? String(err.message).slice(0, 200) : 'unknown',
+    }).catch(() => {});
     return null;
   }
 }

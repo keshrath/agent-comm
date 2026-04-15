@@ -1,0 +1,163 @@
+{
+  "scenario": "b1-catastrophe",
+  "dry_run": true,
+  "blocks_per_week": 3,
+  "naive": {
+    "trials": [
+      {
+        "runId": "dry-naive-0",
+        "condition": "naive",
+        "bDelaySec": 38.060706355609,
+        "costUsd": 0.42,
+        "wallSec": 90,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["db/schema.sql", "scripts/deploy.sh"],
+          "leakedAFiles": ["db/schema.sql"],
+          "commitPurity": "MIXED",
+          "recoveryMinutesEst": 3
+        }
+      },
+      {
+        "runId": "dry-naive-1",
+        "condition": "naive",
+        "bDelaySec": 29.65598074486479,
+        "costUsd": 0.42,
+        "wallSec": 90,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["db/schema.sql", "scripts/deploy.sh"],
+          "leakedAFiles": ["db/schema.sql"],
+          "commitPurity": "MIXED",
+          "recoveryMinutesEst": 3
+        }
+      },
+      {
+        "runId": "dry-naive-2",
+        "condition": "naive",
+        "bDelaySec": 51.88561864197254,
+        "costUsd": 0.42,
+        "wallSec": 90,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["db/schema.sql", "scripts/deploy.sh"],
+          "leakedAFiles": ["db/schema.sql"],
+          "commitPurity": "MIXED",
+          "recoveryMinutesEst": 3
+        }
+      }
+    ],
+    "summary": {
+      "blockedRate": 0,
+      "pureRate": 0,
+      "mixedRate": 1,
+      "meanRecoveryMin": 3,
+      "meanCostUsd": 0.42,
+      "meanWallSec": 90,
+      "recoveryMin": {
+        "mean": 3,
+        "stddev": 0,
+        "min": 3,
+        "max": 3,
+        "n": 3
+      },
+      "costUsd": {
+        "mean": 0.42,
+        "stddev": 0,
+        "min": 0.42,
+        "max": 0.42,
+        "n": 3
+      },
+      "wallSec": {
+        "mean": 90,
+        "stddev": 0,
+        "min": 90,
+        "max": 90,
+        "n": 3
+      }
+    }
+  },
+  "hooked": {
+    "trials": [
+      {
+        "runId": "dry-hooked-0",
+        "condition": "hooked",
+        "bDelaySec": 41.83537227916531,
+        "costUsd": 0.48,
+        "wallSec": 102,
+        "analysis": {
+          "blocked": true,
+          "committed": true,
+          "commitFiles": ["scripts/deploy.sh"],
+          "leakedAFiles": [],
+          "commitPurity": "B_BLOCKED_AND_REVISED",
+          "recoveryMinutesEst": 0
+        }
+      },
+      {
+        "runId": "dry-hooked-1",
+        "condition": "hooked",
+        "bDelaySec": 14.614764431025833,
+        "costUsd": 0.48,
+        "wallSec": 102,
+        "analysis": {
+          "blocked": true,
+          "committed": true,
+          "commitFiles": ["scripts/deploy.sh"],
+          "leakedAFiles": [],
+          "commitPurity": "B_BLOCKED_AND_REVISED",
+          "recoveryMinutesEst": 0
+        }
+      },
+      {
+        "runId": "dry-hooked-2",
+        "condition": "hooked",
+        "bDelaySec": 33.96258982014842,
+        "costUsd": 0.48,
+        "wallSec": 102,
+        "analysis": {
+          "blocked": true,
+          "committed": true,
+          "commitFiles": ["scripts/deploy.sh"],
+          "leakedAFiles": [],
+          "commitPurity": "B_BLOCKED_AND_REVISED",
+          "recoveryMinutesEst": 0
+        }
+      }
+    ],
+    "summary": {
+      "blockedRate": 1,
+      "pureRate": 1,
+      "mixedRate": 0,
+      "meanRecoveryMin": 0,
+      "meanCostUsd": 0.48,
+      "meanWallSec": 102,
+      "recoveryMin": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 3
+      },
+      "costUsd": {
+        "mean": 0.48,
+        "stddev": 0,
+        "min": 0.48,
+        "max": 0.48,
+        "n": 3
+      },
+      "wallSec": {
+        "mean": 102,
+        "stddev": 0,
+        "min": 102,
+        "max": 102,
+        "n": 3
+      }
+    }
+  },
+  "headline_hours_per_month": 0.6495,
+  "generated_at": "2026-04-14T23:44:23.070Z"
+}

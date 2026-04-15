@@ -145,14 +145,41 @@ export const tools: ToolDefinition[] = [
   },
 
   {
+    name: 'comm_poll',
+    description:
+      'Block until a new inbox message arrives or timeout_ms elapses. Replaces busy-poll loops (comm_inbox + sleep). Returns immediately if the inbox already has matches. Max timeout: 60000ms.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        timeout_ms: {
+          type: 'number',
+          description: 'Maximum wait time in ms (default: 5000, max: 60000)',
+        },
+        unread_only: { type: 'boolean', description: 'Only unread messages (default: true)' },
+        limit: { type: 'number', description: 'Max messages (default: 50, max: 500)' },
+        importance: {
+          type: 'string',
+          enum: ['low', 'normal', 'high', 'urgent'],
+          description: 'Only return messages at this importance level',
+        },
+      },
+    },
+  },
+
+  {
     name: 'comm_inbox',
     description:
-      'Read messages in your inbox (direct + channel messages). Set thread_id to get a specific thread instead.',
+      'Read messages in your inbox (direct + channel messages). Set thread_id to get a specific thread instead. Filter by importance to find urgent messages cheaply.',
     inputSchema: {
       type: 'object',
       properties: {
         unread_only: { type: 'boolean', description: 'Only unread messages (default: true)' },
         limit: { type: 'number', description: 'Max messages (default: 50, max: 500)' },
+        importance: {
+          type: 'string',
+          enum: ['low', 'normal', 'high', 'urgent'],
+          description: 'Only return messages at this importance level',
+        },
         thread_id: {
           type: 'number',
           description:
@@ -222,21 +249,6 @@ export const tools: ToolDefinition[] = [
         prefix: { type: 'string', description: '[list] Filter by key prefix' },
       },
       required: ['action'],
-    },
-  },
-
-  {
-    name: 'comm_search',
-    description: 'Full-text search across all messages.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Search query' },
-        channel: { type: 'string', description: 'Limit to a channel name' },
-        from: { type: 'string', description: 'Filter by sender agent name or ID' },
-        limit: { type: 'number', description: 'Max results (default: 20)' },
-      },
-      required: ['query'],
     },
   },
 ];

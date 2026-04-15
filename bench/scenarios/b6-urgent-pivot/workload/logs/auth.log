@@ -1,0 +1,8 @@
+2026-04-15T08:04:19Z login ok user=alice ip=10.0.12.4
+2026-04-15T08:04:21Z login ok user=bob ip=10.0.12.7
+2026-04-15T08:32:11Z login FAIL user=eve ip=203.0.113.15 reason=bad_password
+2026-04-15T08:32:14Z login FAIL user=eve ip=203.0.113.15 reason=bad_password
+2026-04-15T08:32:17Z login FAIL user=eve ip=203.0.113.15 reason=bad_password
+2026-04-15T08:32:20Z BLOCK ip=203.0.113.15 reason=brute_force_detected ttl=900s
+2026-04-15T09:10:03Z login ok user=alice ip=10.0.12.4
+2026-04-15T11:55:41Z logout user=bob

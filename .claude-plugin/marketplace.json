@@ -1,0 +1,19 @@
+{
+  "name": "agent-comm",
+  "owner": {
+    "name": "keshrath"
+  },
+  "metadata": {
+    "description": "Agent-to-agent messaging for AI coding agents.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "agent-comm",
+      "source": "./",
+      "description": "Agent-to-agent messaging for AI coding agents. Sessions, direct/broadcast/channel messages, shared state (TTL + atomic CAS), threaded replies, real-time WebSocket feed, and a local dashboard on :3421. Ships a file-coordination hook that gives parallel agents automatic per-file locking on shared edits.",
+      "category": "workflow",
+      "tags": ["mcp", "multi-agent", "messaging", "coordination"]
+    }
+  ]
+}

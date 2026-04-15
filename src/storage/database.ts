@@ -199,4 +199,16 @@ const migrations: Migration[] = [
       );
     },
   },
+  {
+    // Reactions feature was removed in v1.2.2; this migration drops the residual
+    // table + index. v2 still creates them on fresh installs (kept for historical
+    // replay consistency); this drop runs immediately after on every DB.
+    version: 6,
+    up: (db: Database.Database) => {
+      db.exec(`
+        DROP INDEX IF EXISTS idx_reactions_message;
+        DROP TABLE IF EXISTS message_reactions;
+      `);
+    },
+  },
 ];

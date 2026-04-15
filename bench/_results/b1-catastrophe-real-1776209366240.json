@@ -1,0 +1,121 @@
+{
+  "scenario": "b1-catastrophe",
+  "dry_run": false,
+  "blocks_per_week": 3,
+  "naive": {
+    "trials": [
+      {
+        "runId": "b3-naive-t0-1776208696395",
+        "condition": "naive",
+        "bDelaySec": 38.060706355609,
+        "costUsd": 0.21347974999999997,
+        "wallSec": 100.883,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["db/schema.sql", "scripts/deploy.sh"],
+          "leakedAFiles": ["db/schema.sql"],
+          "commitPurity": "MIXED",
+          "recoveryMinutesEst": 3
+        }
+      },
+      {
+        "runId": "b3-naive-t1-1776208797657",
+        "condition": "naive",
+        "bDelaySec": 29.65598074486479,
+        "costUsd": 0.21370225,
+        "wallSec": 95.864,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["db/schema.sql", "scripts/deploy.sh"],
+          "leakedAFiles": ["db/schema.sql"],
+          "commitPurity": "MIXED",
+          "recoveryMinutesEst": 3
+        }
+      },
+      {
+        "runId": "b3-naive-t2-1776208893860",
+        "condition": "naive",
+        "bDelaySec": 51.88561864197254,
+        "costUsd": 0.2137495,
+        "wallSec": 121.251,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["db/schema.sql", "scripts/deploy.sh"],
+          "leakedAFiles": ["db/schema.sql"],
+          "commitPurity": "MIXED",
+          "recoveryMinutesEst": 3
+        }
+      }
+    ],
+    "summary": {
+      "blockedRate": 0,
+      "pureRate": 0,
+      "mixedRate": 1,
+      "meanRecoveryMin": 3,
+      "meanCostUsd": 0.21364383333333334,
+      "meanWallSec": 105.99933333333335
+    }
+  },
+  "hooked": {
+    "trials": [
+      {
+        "runId": "b3-hooked-t0-1776209015748",
+        "condition": "hooked",
+        "bDelaySec": 41.83537227916531,
+        "costUsd": 0.25112199999999996,
+        "wallSec": 125.877,
+        "analysis": {
+          "blocked": true,
+          "committed": true,
+          "commitFiles": ["scripts/deploy.sh"],
+          "leakedAFiles": [],
+          "commitPurity": "B_BLOCKED_AND_REVISED",
+          "recoveryMinutesEst": 0
+        }
+      },
+      {
+        "runId": "b3-hooked-t1-1776209142830",
+        "condition": "hooked",
+        "bDelaySec": 14.614764431025833,
+        "costUsd": 0.26496775,
+        "wallSec": 89.832,
+        "analysis": {
+          "blocked": false,
+          "committed": true,
+          "commitFiles": ["scripts/deploy.sh"],
+          "leakedAFiles": [],
+          "commitPurity": "PURE",
+          "recoveryMinutesEst": 0
+        }
+      },
+      {
+        "runId": "b3-hooked-t2-1776209232998",
+        "condition": "hooked",
+        "bDelaySec": 33.96258982014842,
+        "costUsd": 0.32065975,
+        "wallSec": 132.073,
+        "analysis": {
+          "blocked": true,
+          "committed": true,
+          "commitFiles": ["scripts/deploy.sh"],
+          "leakedAFiles": [],
+          "commitPurity": "B_BLOCKED_AND_REVISED",
+          "recoveryMinutesEst": 0
+        }
+      }
+    ],
+    "summary": {
+      "blockedRate": 0.6666666666666666,
+      "pureRate": 1,
+      "mixedRate": 0,
+      "meanRecoveryMin": 0,
+      "meanCostUsd": 0.27891649999999996,
+      "meanWallSec": 115.92733333333335
+    }
+  },
+  "headline_hours_per_month": 0.6495,
+  "generated_at": "2026-04-14T23:29:26.240Z"
+}

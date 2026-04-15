@@ -1,0 +1,168 @@
+{
+  "scenario": "b6-urgent-pivot",
+  "version": "1.3.9",
+  "generated_at": "2026-04-15T14:09:16.073Z",
+  "args": {
+    "dryRun": true,
+    "real": false,
+    "n": 3,
+    "maxCostUsd": 5,
+    "conditions": ["no-channels", "with-channels"]
+  },
+  "aggregates": [
+    {
+      "condition": "no-channels",
+      "n": 3,
+      "per_run": [
+        {
+          "pivoted": 1,
+          "stop_delivered": 1,
+          "polls_made": 0,
+          "latency_to_pivot_s": 5.340666624717414,
+          "wall_seconds": 36.17333893664181,
+          "total_cost_usd": 0.46739494080189614
+        },
+        {
+          "pivoted": 1,
+          "stop_delivered": 1,
+          "polls_made": 0,
+          "latency_to_pivot_s": 5.34531725384295,
+          "wall_seconds": 39.438674482516944,
+          "total_cost_usd": 0.4771374078653753
+        },
+        {
+          "pivoted": 1,
+          "stop_delivered": 1,
+          "polls_made": 0,
+          "latency_to_pivot_s": 5.343767044134438,
+          "wall_seconds": 38.35022930055857,
+          "total_cost_usd": 0.35388991884421556
+        }
+      ],
+      "pivoted": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "stop_delivered": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "polls_made": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 3
+      },
+      "latency_to_pivot_s": {
+        "mean": 5.343250307564934,
+        "stddev": 0.001933451202300655,
+        "min": 5.340666624717414,
+        "max": 5.34531725384295,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 37.987414239905775,
+        "stddev": 1.3575296517243565,
+        "min": 36.17333893664181,
+        "max": 39.438674482516944,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.432807422503829,
+        "stddev": 0.05594466435100294,
+        "min": 0.35388991884421556,
+        "max": 0.4771374078653753,
+        "n": 3
+      },
+      "pivoted_count": 3,
+      "passed": true,
+      "stopped_early": false
+    },
+    {
+      "condition": "with-channels",
+      "n": 3,
+      "per_run": [
+        {
+          "pivoted": 1,
+          "stop_delivered": 1,
+          "polls_made": 4,
+          "latency_to_pivot_s": 4.177124118432403,
+          "wall_seconds": 36.40251675900072,
+          "total_cost_usd": 0.4340181890875101
+        },
+        {
+          "pivoted": 1,
+          "stop_delivered": 1,
+          "polls_made": 4,
+          "latency_to_pivot_s": 5.26556930039078,
+          "wall_seconds": 37.05201456323266,
+          "total_cost_usd": 0.4562280086334795
+        },
+        {
+          "pivoted": 1,
+          "stop_delivered": 1,
+          "polls_made": 4,
+          "latency_to_pivot_s": 4.9027542397379875,
+          "wall_seconds": 40.835515295155346,
+          "total_cost_usd": 0.4488247354514897
+        }
+      ],
+      "pivoted": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "stop_delivered": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "polls_made": {
+        "mean": 4,
+        "stddev": 0,
+        "min": 4,
+        "max": 4,
+        "n": 3
+      },
+      "latency_to_pivot_s": {
+        "mean": 4.781815886187057,
+        "stddev": 0.4525098839081188,
+        "min": 4.177124118432403,
+        "max": 5.26556930039078,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 38.09668220579624,
+        "stddev": 1.954715131496451,
+        "min": 36.40251675900072,
+        "max": 40.835515295155346,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.4463569777241598,
+        "stddev": 0.00923350392923252,
+        "min": 0.4340181890875101,
+        "max": 0.4562280086334795,
+        "n": 3
+      },
+      "pivoted_count": 3,
+      "passed": true,
+      "stopped_early": false
+    }
+  ],
+  "overall": {
+    "passed": true,
+    "reason": "with-channels 3/3 >= no-channels 3/3 - 1 — MESSAGE pays rent (B12 was a hook-noise problem, not a messaging problem)"
+  }
+}

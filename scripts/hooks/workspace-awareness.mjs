@@ -30,6 +30,7 @@ import {
   filterEditsToWorkspace,
   filterEditsByOthers,
 } from './_agent-comm-rest.mjs';
+import { signalFailOpen } from './_fail-open.mjs';
 
 const PORT = parseInt(process.env.AGENT_COMM_PORT ?? '3421', 10);
 const TTL_SECONDS = parseInt(process.env.AGENT_COMM_WORKSPACE_TTL ?? '14400', 10); // 4h
@@ -43,7 +44,7 @@ async function main() {
 
   // Register self in workspace-agents.
   const startedAt = new Date().toISOString();
-  await call(
+  const reg = await call(
     'POST',
     `/api/state/${encodeURIComponent(WORKSPACE_NS)}/${encodeURIComponent(myKey)}`,
     {
@@ -52,6 +53,24 @@ async function main() {
       ttl_seconds: TTL_SECONDS,
     },
   );
+  if (!reg) {
+    // Dashboard unreachable — we can't register, can't list others, and can't
+    // read file-edits. The SessionStart context will be empty and the user
+    // has no indication coordination is broken. Surface it explicitly.
+    await signalFailOpen('workspace-awareness', 'dashboard-unreachable', {
+      workspace,
+    });
+    // Still emit a minimal SessionStart payload so Claude Code doesn't hang.
+    const out = {
+      systemMessage: `agent-comm: workspace ${wsName} (coordination offline)`,
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: `agent-comm dashboard: http://localhost:${PORT} (UNREACHABLE — workspace coordination is OFFLINE; hooks are failing open)`,
+      },
+    };
+    console.log(JSON.stringify(out));
+    return;
+  }
 
   const allAgents = await listWorkspaceAgents(workspace);
   const others = allAgents.filter((a) => a.agent !== AGENT_ID);
@@ -60,22 +79,26 @@ async function main() {
   const wsEdits = filterEditsToWorkspace(allEdits, workspace);
   const otherEdits = filterEditsByOthers(wsEdits, AGENT_ID).slice(0, 5);
 
+  // Factual discovery only. We deliberately do NOT inject prescriptive advice
+  // ("Before editing files, check the dashboard...") — bench B12/B13 showed
+  // the model treats such advisory text as flavor and ignores it during
+  // focused work. Active enforcement (bash-guard, file-coord) handles the
+  // safety contracts. This hook just surfaces the facts; what the agent does
+  // with them is its own judgment, prompt-contract-driven.
   let context = `agent-comm dashboard: http://localhost:${PORT}\nworkspace: ${wsName} (${workspace})`;
 
   if (others.length > 0) {
-    context += `\n\nWARNING: ${others.length} other Claude session(s) active in this workspace:`;
+    context += `\n\nOther Claude session(s) active in this workspace:`;
     for (const o of others) {
       context += `\n  - ${o.agent} (started ${ageString(o.started_at)})`;
     }
-    context += `\n\nBefore editing files, check the dashboard for live activity. Use mcp__agent-comm__comm_send to coordinate scope. The bash-guard hook will block git commit / push / install / test calls that would conflict with another session's WIP — coordinate first to avoid those blocks.`;
   }
 
   if (otherEdits.length > 0) {
-    context += `\n\nRecent file edits in this workspace by OTHER sessions:`;
+    context += `\n\nRecent file edits in this workspace by other sessions:`;
     for (const e of otherEdits) {
       context += `\n  - ${e.file} — ${e.editor} (${ageString(e.when)})`;
     }
-    context += `\n\nThese files may have WIP. Inspect with \`git diff <file>\` before editing or committing.`;
   }
 
   const out = {

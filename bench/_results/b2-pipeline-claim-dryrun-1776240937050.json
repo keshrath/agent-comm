@@ -1,0 +1,168 @@
+{
+  "scenario": "b2-pipeline-claim",
+  "version": "1.3.9",
+  "generated_at": "2026-04-15T08:15:37.050Z",
+  "args": {
+    "dryRun": true,
+    "real": false,
+    "n": 3,
+    "maxCostUsd": 15,
+    "conditions": ["naive", "pipeline-claim"]
+  },
+  "aggregates": [
+    {
+      "condition": "naive",
+      "n": 3,
+      "per_run": [
+        {
+          "unique_tasks": 3,
+          "duplicate_work_count": 1,
+          "claims_attempted": 5,
+          "claims_won": 5,
+          "wall_seconds": 69.71692428458482,
+          "total_cost_usd": 0.4128610263997689,
+          "agents_launched": 5
+        },
+        {
+          "unique_tasks": 3,
+          "duplicate_work_count": 1,
+          "claims_attempted": 5,
+          "claims_won": 5,
+          "wall_seconds": 60.258172454778105,
+          "total_cost_usd": 0.4195239722635597,
+          "agents_launched": 5
+        },
+        {
+          "unique_tasks": 3,
+          "duplicate_work_count": 1,
+          "claims_attempted": 5,
+          "claims_won": 5,
+          "wall_seconds": 80.79942062497139,
+          "total_cost_usd": 0.42618691812735054,
+          "agents_launched": 5
+        }
+      ],
+      "unique_tasks": {
+        "mean": 3,
+        "stddev": 0,
+        "min": 3,
+        "max": 3,
+        "n": 3
+      },
+      "duplicate_work_count": {
+        "mean": 1,
+        "stddev": 0,
+        "min": 1,
+        "max": 1,
+        "n": 3
+      },
+      "claims_attempted": {
+        "mean": 5,
+        "stddev": 0,
+        "min": 5,
+        "max": 5,
+        "n": 3
+      },
+      "claims_won": {
+        "mean": 5,
+        "stddev": 0,
+        "min": 5,
+        "max": 5,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 70.2581724547781,
+        "stddev": 8.3946582731191,
+        "min": 60.258172454778105,
+        "max": 80.79942062497139,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.41952397226355975,
+        "stddev": 0.005440272516691739,
+        "min": 0.4128610263997689,
+        "max": 0.42618691812735054,
+        "n": 3
+      },
+      "passed": true,
+      "stopped_early": false
+    },
+    {
+      "condition": "pipeline-claim",
+      "n": 3,
+      "per_run": [
+        {
+          "unique_tasks": 4,
+          "duplicate_work_count": 0,
+          "claims_attempted": 9,
+          "claims_won": 4,
+          "wall_seconds": 71.15709382109344,
+          "total_cost_usd": 0.5051763723604381,
+          "agents_launched": 5
+        },
+        {
+          "unique_tasks": 4,
+          "duplicate_work_count": 0,
+          "claims_attempted": 9,
+          "claims_won": 4,
+          "wall_seconds": 74.78524442762136,
+          "total_cost_usd": 0.4421180268283933,
+          "agents_launched": 5
+        },
+        {
+          "unique_tasks": 4,
+          "duplicate_work_count": 0,
+          "claims_attempted": 9,
+          "claims_won": 4,
+          "wall_seconds": 78.41339503414929,
+          "total_cost_usd": 0.37905968129634854,
+          "agents_launched": 5
+        }
+      ],
+      "unique_tasks": {
+        "mean": 4,
+        "stddev": 0,
+        "min": 4,
+        "max": 4,
+        "n": 3
+      },
+      "duplicate_work_count": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0,
+        "n": 3
+      },
+      "claims_attempted": {
+        "mean": 9,
+        "stddev": 0,
+        "min": 9,
+        "max": 9,
+        "n": 3
+      },
+      "claims_won": {
+        "mean": 4,
+        "stddev": 0,
+        "min": 4,
+        "max": 4,
+        "n": 3
+      },
+      "wall_seconds": {
+        "mean": 74.78524442762136,
+        "stddev": 2.962372565320906,
+        "min": 71.15709382109344,
+        "max": 78.41339503414929,
+        "n": 3
+      },
+      "total_cost_usd": {
+        "mean": 0.4421180268283933,
+        "stddev": 0.051486923525873717,
+        "min": 0.37905968129634854,
+        "max": 0.5051763723604381,
+        "n": 3
+      },
+      "passed": true,
+      "stopped_early": false
+    }
+  ]
+}

@@ -309,15 +309,38 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
     );
   },
 
+  comm_poll(ctx, args, agent) {
+    const self = agent.require();
+    const timeoutMs = optNumber(args, 'timeout_ms') ?? 5000;
+    const importance = optString(args, 'importance') as
+      | 'low'
+      | 'normal'
+      | 'high'
+      | 'urgent'
+      | undefined;
+    return ctx.messages.pollInbox(self.id, timeoutMs, {
+      unreadOnly: optBoolean(args, 'unread_only') ?? true,
+      limit: optNumber(args, 'limit'),
+      importance,
+    });
+  },
+
   comm_inbox(ctx, args, agent) {
     const self = agent.require();
     const threadId = optNumber(args, 'thread_id');
     if (threadId !== undefined) {
       return ctx.messages.thread(threadId);
     }
+    const importance = optString(args, 'importance') as
+      | 'low'
+      | 'normal'
+      | 'high'
+      | 'urgent'
+      | undefined;
     return ctx.messages.inbox(self.id, {
       unreadOnly: optBoolean(args, 'unread_only') ?? true,
       limit: optNumber(args, 'limit'),
+      importance,
     });
   },
 
@@ -470,15 +493,5 @@ export const toolHandlers: Record<string, ToolHandlerFn> = {
       default:
         throw new ValidationError(`Unknown action "${action}". Valid: set, get, list, delete, cas`);
     }
-  },
-
-  comm_search(ctx, args, agent) {
-    agent.require();
-    const fromAgent = optString(args, 'from');
-    return ctx.messages.search(requireString(args, 'query'), {
-      channel: args.channel ? agent.resolveChannel(requireString(args, 'channel')) : undefined,
-      from: fromAgent ? agent.resolve(fromAgent).id : undefined,
-      limit: optNumber(args, 'limit'),
-    });
   },
 };

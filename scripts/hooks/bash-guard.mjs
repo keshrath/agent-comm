@@ -37,6 +37,15 @@ import {
   filterEditsByOthers,
   normPath,
 } from './_agent-comm-rest.mjs';
+import { signalFailOpen, signalBlock } from './_fail-open.mjs';
+
+// Probe REST once per invocation. If the dashboard can't be reached, every
+// rule.check() would run on empty files-edited data — indistinguishable from
+// "no conflict" — so we need an explicit fail-open signal.
+async function probeRest() {
+  const r = await call('GET', `/api/state?namespace=files-edited`, null);
+  return r && r.status === 200;
+}
 
 // How recent is "recent" for warnings (10 minutes by default).
 const RECENT_MS = parseInt(process.env.AGENT_COMM_RECENT_EDIT_MS ?? '600000', 10);
@@ -113,6 +122,22 @@ function gitStaged(cwd) {
   return out.split('\n').filter(Boolean);
 }
 
+function gitModifiedTracked(cwd) {
+  const out = git(['diff', '--name-only'], cwd);
+  if (out == null) return [];
+  return out.split('\n').filter(Boolean);
+}
+
+function commitUsesDashA(cmd) {
+  if (/(^|\s)--all(\s|$|=)/.test(cmd)) return true;
+  for (const tok of cmd.split(/\s+/)) {
+    if (tok.startsWith('--')) continue;
+    if (!tok.startsWith('-')) continue;
+    if (/^-[A-Za-z]*a[A-Za-z]*$/.test(tok)) return true;
+  }
+  return false;
+}
+
 function gitUnpushed(cwd) {
   // Files with local changes (staged or unstaged) — proxy for "what could be in this push"
   const out = git(['diff', '--name-only', 'HEAD'], cwd);
@@ -135,11 +160,16 @@ async function recentOtherEditsForFiles(workspace, files) {
   });
 }
 
-async function checkStagedFilesAgainstOthers(_cmd, cwd) {
+async function checkStagedFilesAgainstOthers(cmd, cwd) {
   const staged = gitStaged(cwd);
   if (staged == null) return { allow: true }; // not a git repo, nothing to check
-  if (staged.length === 0) return { allow: true }; // empty commit
-  const conflicts = await recentOtherEditsForFiles(cwd, staged);
+  let effective = staged;
+  if (commitUsesDashA(cmd)) {
+    const modified = gitModifiedTracked(cwd);
+    effective = [...new Set([...staged, ...modified])];
+  }
+  if (effective.length === 0) return { allow: true }; // empty commit
+  const conflicts = await recentOtherEditsForFiles(cwd, effective);
   if (conflicts.length === 0) return { allow: true };
   const lines = conflicts
     .slice(0, 8)
@@ -273,14 +303,46 @@ async function main() {
   const matched = RULES.filter((r) => r.match(command));
   if (matched.length === 0) process.exit(0);
 
+  // A matched rule with REST down means we'd run the check on empty data
+  // and silently fall open. Surface that explicitly.
+  const restAlive = await probeRest();
+  if (!restAlive) {
+    await signalFailOpen('bash-guard', 'dashboard-unreachable', {
+      rules: matched.map((r) => r.name),
+      command: command.slice(0, 200),
+    });
+    // Intentional: continue to exit 0 — we never block real work because the
+    // bus is down.
+    process.exit(0);
+  }
+
   for (const rule of matched) {
     let result;
+    let threw = false;
     try {
       result = await rule.check(command, cwd);
-    } catch {
+    } catch (err) {
+      threw = true;
+      await signalFailOpen('bash-guard', 'rule-check-threw', {
+        rule: rule.name,
+        error: err && err.message ? String(err.message).slice(0, 200) : 'unknown',
+      });
       result = { allow: true };
     }
+    void threw;
     if (result && result.allow === false) {
+      // Surface the block as a first-class dashboard event. "target" is the
+      // bash command (clamped) — the diagnostic reason lives in the preview.
+      // reason "would-clobber-wip" covers the shape of every BLOCK outcome in
+      // the RULES table today (commit/push include other-agent WIP, install
+      // racing package.json edits, migrations racing schema). Future rules
+      // can override by returning result.reason_code.
+      await signalBlock('bash-guard', {
+        tool: 'Bash',
+        target: command.slice(0, 240),
+        rule: rule.name,
+        reason: result.reason_code ?? 'would-clobber-wip',
+      });
       process.stderr.write(`[bash-guard:${rule.name}] ${result.reason}\n`);
       process.exit(2);
     }

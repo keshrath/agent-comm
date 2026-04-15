@@ -1,0 +1,6 @@
+2026-04-15T08:01:15Z [main] pool open size=10 idle=10
+2026-04-15T08:03:44Z [pool-3] slow: 812ms query="SELECT * FROM orders WHERE user_id = $1 AND state IN ('open','pending','processing') ORDER BY created_at DESC LIMIT 100"
+2026-04-15T08:03:44Z [pool-3] hint: missing index on orders(user_id, state)
+2026-04-15T09:55:00Z [main] vacuum analyze started
+2026-04-15T10:04:18Z [main] vacuum analyze done elapsed=9m18s
+2026-04-15T12:30:00Z [pool-7] deadlock detected tx1=orders/charge tx2=charge/orders — aborted tx2

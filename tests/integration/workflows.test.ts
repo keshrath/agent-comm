@@ -223,7 +223,11 @@ describe('Channel lifecycle with description updates', () => {
 });
 
 describe('Search across agents and channels', () => {
-  it('full-text search finds messages from multiple sources', () => {
+  // comm_search is no longer exposed via MCP — the FTS5 backend remains
+  // accessible via REST (/api/messages/search) and MessageService.search()
+  // for the dashboard's human-facing search bar. This test exercises the
+  // underlying MessageService directly to confirm the primitive still works.
+  it('full-text search via MessageService finds messages from multiple sources', () => {
     const a1 = agent('arch');
     const a2 = agent('impl');
 
@@ -243,7 +247,7 @@ describe('Search across agents and channels', () => {
       content: 'Make sure the JWT secret rotation is handled properly.',
     });
 
-    const results = a1('comm_search', { query: 'JWT' }) as { message: { content: string } }[];
+    const results = ctx.messages.search('JWT');
     expect(results.length).toBe(3);
   });
 });

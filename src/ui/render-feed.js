@@ -24,6 +24,7 @@
     state_change: 'sync_alt',
     handoff: 'swap_horiz',
     branch: 'call_split',
+    'hook-block': 'block',
   };
 
   var FEED_TYPE_COLORS = {
@@ -39,14 +40,50 @@
     state_change: 'var(--yellow, #eab308)',
     handoff: 'var(--orange, #db6d28)',
     branch: 'var(--purple, #7c3aed)',
+    // hook-block = rare-but-real "prevented conflict" moment. Warning-orange
+    // with a block icon so it visually stands apart from routine activity.
+    'hook-block': 'var(--orange, #db6d28)',
   };
+
+  // Derive a human-readable phrase for a hook-block event. The preview is a
+  // JSON payload emitted by scripts/hooks/_fail-open.mjs signalBlock(); we
+  // parse it best-effort and build something like:
+  //   "prevented Edit conflict on src/foo.ts (held by agent-bar)"
+  //   "prevented Bash conflict: git commit -am ... (rule: git-commit)"
+  // Falls back to the raw preview if parsing fails.
+  function hookBlockPhrase(e) {
+    if (!e || typeof e.preview !== 'string') return null;
+    try {
+      var p = JSON.parse(e.preview);
+      if (!p || typeof p !== 'object') return null;
+      var tool = p.tool || 'tool';
+      var parts = ['prevented ' + tool + ' conflict'];
+      if (p.target) parts.push('on ' + p.target);
+      if (p.holder_agent && p.holder_agent !== p.blocked_agent) {
+        parts.push('(held by ' + p.holder_agent + ')');
+      } else if (p.rule) {
+        parts.push('(rule: ' + p.rule + ')');
+      }
+      return parts.join(' ');
+    } catch (_) {
+      return null;
+    }
+  }
 
   function renderFeedItem(e) {
     var icon = FEED_TYPE_ICONS[e.type] || 'circle';
     var color = FEED_TYPE_COLORS[e.type] || 'var(--text-muted)';
     var agentName = e.agent_id ? AC.resolveAgentName(e.agent_id) : 'system';
+    var isBlock = e.type === 'hook-block';
+    var typeClass = isBlock ? 'feed-item feed-item-block' : 'feed-item';
+    var typeLabel = isBlock ? 'hook block' : e.type;
+    var phrase = isBlock ? hookBlockPhrase(e) : null;
+    var showTarget = e.target && !phrase; // phrase already mentions target
+    var showPreview = e.preview && !isBlock; // preview is raw JSON for hook-block; prefer phrase
     return (
-      '<div class="feed-item">' +
+      '<div class="' +
+      typeClass +
+      '">' +
       '<div class="feed-icon" style="color:' +
       color +
       '"><span class="material-symbols-outlined">' +
@@ -57,7 +94,7 @@
       '<span class="feed-type" style="color:' +
       color +
       '">' +
-      AC.esc(e.type) +
+      AC.esc(typeLabel) +
       '</span>' +
       '<span class="feed-agent">' +
       AC.esc(agentName) +
@@ -66,8 +103,15 @@
       AC.timeAgo(e.created_at) +
       '</span>' +
       '</div>' +
-      (e.target ? '<div class="feed-target">' + AC.esc(e.target) + '</div>' : '') +
-      (e.preview ? '<div class="feed-preview">' + AC.esc(e.preview) + '</div>' : '') +
+      (phrase
+        ? '<div class="feed-block-phrase" style="color:' +
+          color +
+          ';font-weight:600">' +
+          AC.esc(phrase) +
+          '</div>'
+        : '') +
+      (showTarget ? '<div class="feed-target">' + AC.esc(e.target) + '</div>' : '') +
+      (showPreview ? '<div class="feed-preview">' + AC.esc(e.preview) + '</div>' : '') +
       '</div>' +
       '</div>'
     );

@@ -1,0 +1,13 @@
+2026-04-15T08:01:12Z INFO  server started on :8080 pid=41021
+2026-04-15T08:01:15Z INFO  db pool ready size=10
+2026-04-15T08:02:03Z INFO  GET /health 200 1ms
+2026-04-15T08:03:44Z WARN  slow query elapsed=812ms sql="SELECT * FROM orders WHERE ..."
+2026-04-15T08:04:19Z INFO  POST /login user=alice 200 45ms
+2026-04-15T08:04:21Z INFO  POST /login user=bob 200 38ms
+2026-04-15T08:07:57Z ERROR upstream timeout service=billing url=/charge status=504
+2026-04-15T08:08:02Z WARN  retry attempt=1 service=billing
+2026-04-15T08:08:04Z INFO  retry succeeded service=billing
+2026-04-15T08:15:31Z INFO  GET /orders 200 12ms user=alice
+2026-04-15T08:21:44Z ERROR panic goroutine=worker-7 err="nil pointer deref in router.go:218"
+2026-04-15T08:21:44Z INFO  worker-7 respawned
+2026-04-15T08:30:19Z INFO  daily digest emitted recipients=8421
