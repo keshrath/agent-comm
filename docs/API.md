@@ -1,6 +1,6 @@
 # REST API Reference
 
-All endpoints return JSON. CORS enabled on all routes.
+All endpoints return JSON. Loopback only: foreign `Host`/`Origin` headers get 403, request bodies must be `application/json`, no wildcard CORS.
 
 ## Read endpoints
 

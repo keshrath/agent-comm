@@ -600,7 +600,7 @@ comm_state with action "cas", namespace "locks", key "deploy", expected "my-agen
 
 ## 6. REST API Reference
 
-The REST API is served by the dashboard HTTP server. All responses include `Access-Control-Allow-Origin: *` for CORS. All endpoints return JSON.
+The REST API is served by the dashboard HTTP server. All endpoints return JSON. Loopback only: foreign `Host`/`Origin` headers get 403, request bodies must be `application/json`, no wildcard CORS.
 
 ### Health and Overview
 

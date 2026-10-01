@@ -153,7 +153,7 @@ Registers the MCP server in `~/.claude.json`, installs the [hook scripts](docs/S
 
 ## REST API
 
-All endpoints return JSON. CORS enabled. See [full API reference](docs/API.md) for details.
+All endpoints return JSON. Loopback only: foreign `Host`/`Origin` headers get 403, request bodies must be `application/json`, no wildcard CORS. See [full API reference](docs/API.md) for details.
 
 ```
 GET  /health                              Server status + uptime
@@ -257,10 +257,11 @@ npm run check         # Full CI: typecheck + lint + format + test
 
 ## Environment variables
 
-| Variable                    | Default | Description                                |
-| --------------------------- | ------- | ------------------------------------------ |
-| `AGENT_COMM_PORT`           | `3421`  | Dashboard HTTP/WebSocket port              |
-| `AGENT_COMM_RETENTION_DAYS` | `7`     | Days before auto-purge of old data (1-365) |
+| Variable                    | Default     | Description                                                  |
+| --------------------------- | ----------- | ------------------------------------------------------------ |
+| `AGENT_COMM_PORT`           | `3421`      | Dashboard HTTP/WebSocket port                                |
+| `AGENT_COMM_HOST`           | `127.0.0.1` | Dashboard bind address (`0.0.0.0` exposes it to the network) |
+| `AGENT_COMM_RETENTION_DAYS` | `7`         | Days before auto-purge of old data (1-365)                   |
 
 ## Documentation
 

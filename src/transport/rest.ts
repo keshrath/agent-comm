@@ -520,16 +520,6 @@ export function createRouter(ctx: AppContext): (req: IncomingMessage, res: Serve
   // -----------------------------------------------------------------------
 
   return async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      });
-      res.end();
-      return;
-    }
-
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
     const pathname = url.pathname;
 
